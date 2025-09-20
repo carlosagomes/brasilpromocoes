@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brasil Promoções - Busca de Promoções Comerciais</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-gift"></i>
+                    <h1>Brasil Promoções</h1>
+                </div>
+                <p class="subtitle">Encontre promoções comerciais autorizadas no Brasil</p>
+            </div>
+        </header>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-container">
+                <div class="search-header">
+                    <h2>Buscar Promoções</h2>
+                    <p>Use os filtros abaixo para encontrar promoções específicas</p>
+                </div>
+
+                <form id="searchForm" class="search-form">
+                    <div class="form-grid">
+                        <!-- Ano da Promoção -->
+                        <div class="form-group">
+                            <label for="anoPromocao">
+                                <i class="fas fa-calendar"></i>
+                                Ano da Promoção *
+                            </label>
+                            <select id="anoPromocao" name="anoPromocao" required>
+                                <option value="">Selecione o ano</option>
+                                <option value="2025">2025</option>
+                                <option value="2024">2024</option>
+                                <option value="2023">2023</option>
+                                <option value="2022">2022</option>
+                                <option value="2021">2021</option>
+                                <option value="2020">2020</option>
+                            </select>
+                        </div>
+
+                        <!-- UF -->
+                        <div class="form-group">
+                            <label for="uf">
+                                <i class="fas fa-map-marker-alt"></i>
+                                Estado (UF)
+                            </label>
+                            <select id="uf" name="uf">
+                                <option value="">Todos os estados</option>
+                                <option value="AC">Acre (AC)</option>
+                                <option value="AL">Alagoas (AL)</option>
+                                <option value="AP">Amapá (AP)</option>
+                                <option value="AM">Amazonas (AM)</option>
+                                <option value="BA">Bahia (BA)</option>
+                                <option value="CE">Ceará (CE)</option>
+                                <option value="DF">Distrito Federal (DF)</option>
+                                <option value="ES">Espírito Santo (ES)</option>
+                                <option value="GO">Goiás (GO)</option>
+                                <option value="MA">Maranhão (MA)</option>
+                                <option value="MT">Mato Grosso (MT)</option>
+                                <option value="MS">Mato Grosso do Sul (MS)</option>
+                                <option value="MG">Minas Gerais (MG)</option>
+                                <option value="PA">Pará (PA)</option>
+                                <option value="PB">Paraíba (PB)</option>
+                                <option value="PR">Paraná (PR)</option>
+                                <option value="PE">Pernambuco (PE)</option>
+                                <option value="PI">Piauí (PI)</option>
+                                <option value="RJ">Rio de Janeiro (RJ)</option>
+                                <option value="RN">Rio Grande do Norte (RN)</option>
+                                <option value="RS">Rio Grande do Sul (RS)</option>
+                                <option value="RO">Rondônia (RO)</option>
+                                <option value="RR">Roraima (RR)</option>
+                                <option value="SC">Santa Catarina (SC)</option>
+                                <option value="SP">São Paulo (SP)</option>
+                                <option value="SE">Sergipe (SE)</option>
+                                <option value="TO">Tocantins (TO)</option>
+                            </select>
+                        </div>
+
+                        <!-- Modalidade -->
+                        <div class="form-group">
+                            <label for="modalidade">
+                                <i class="fas fa-trophy"></i>
+                                Modalidade
+                            </label>
+                            <select id="modalidade" name="modalidade">
+                                <option value="">Todas as modalidades</option>
+                                <option value="Concurso">Concurso</option>
+                                <option value="Assemelhado a Concurso">Assemelhado a Concurso</option>
+                                <option value="Sorteio">Sorteio</option>
+                                <option value="Assemelhado a Sorteio">Assemelhado a Sorteio</option>
+                                <option value="Vale-Brinde">Vale-Brinde</option>
+                                <option value="Assemelhado a Vale-Brinde">Assemelhado a Vale-Brinde</option>
+                            </select>
+                        </div>
+
+                        <!-- Nome da Promoção -->
+                        <div class="form-group">
+                            <label for="nomePromocao">
+                                <i class="fas fa-search"></i>
+                                Nome da Promoção
+                            </label>
+                            <input type="text" id="nomePromocao" name="nomePromocao" placeholder="Digite o nome da promoção">
+                        </div>
+
+                        <!-- Nome do Mandatário -->
+                        <div class="form-group">
+                            <label for="nomeMandatario">
+                                <i class="fas fa-building"></i>
+                                Nome do Mandatário
+                            </label>
+                            <input type="text" id="nomeMandatario" name="nomeMandatario" placeholder="Digite o nome da empresa">
+                        </div>
+
+                        <!-- CNPJ do Mandatário -->
+                        <div class="form-group">
+                            <label for="cnpjMandatario">
+                                <i class="fas fa-id-card"></i>
+                                CNPJ do Mandatário
+                            </label>
+                            <input type="text" id="cnpjMandatario" name="cnpjMandatario" placeholder="Digite apenas números" maxlength="14">
+                        </div>
+
+                        <!-- Número do Certificado -->
+                        <div class="form-group">
+                            <label for="numeroCertificado">
+                                <i class="fas fa-certificate"></i>
+                                Número do Certificado
+                            </label>
+                            <input type="text" id="numeroCertificado" name="numeroCertificado" placeholder="Digite o número do certificado">
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-search">
+                            <i class="fas fa-search"></i>
+                            Buscar Promoções
+                        </button>
+                        <button type="button" id="clearFilters" class="btn-clear">
+                            <i class="fas fa-times"></i>
+                            Limpar Filtros
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state hidden">
+            <div class="spinner"></div>
+            <p>Buscando promoções...</p>
+        </div>
+
+        <!-- Results Section -->
+        <section id="resultsSection" class="results-section hidden">
+            <div class="results-header">
+                <h3 id="resultsTitle">Resultados da Busca</h3>
+                <div class="results-count">
+                    <span id="resultsCount">0</span> promoções encontradas
+                </div>
+            </div>
+            <div id="promocoesContainer" class="promocoes-container">
+                <!-- Promoções serão inseridas aqui via JavaScript -->
+            </div>
+        </section>
+
+        <!-- Error State -->
+        <div id="errorState" class="error-state hidden">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h3>Erro na busca</h3>
+            <p id="errorMessage">Ocorreu um erro ao buscar as promoções. Tente novamente.</p>
+            <button id="retryButton" class="btn-retry">
+                <i class="fas fa-redo"></i>
+                Tentar Novamente
+            </button>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state hidden">
+            <i class="fas fa-search"></i>
+            <h3>Nenhuma promoção encontrada</h3>
+            <p>Tente ajustar os filtros de busca para encontrar promoções.</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
