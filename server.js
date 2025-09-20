@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,26 +38,13 @@ app.use(express.urlencoded({ extended: true }));
 // Servir arquivos estáticos
 app.use(express.static(path.join(__dirname)));
 
-// Cache para requisições (5 minutos)
+// Cache simples para requisições (5 minutos)
 const cache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
-// Função para limpar cache expirado
-function cleanExpiredCache() {
-  const now = Date.now();
-  for (const [key, value] of cache.entries()) {
-    if (now - value.timestamp > CACHE_DURATION) {
-      cache.delete(key);
-    }
-  }
-}
-
-// Limpar cache a cada 10 minutos
-setInterval(cleanExpiredCache, 10 * 60 * 1000);
-
 // Rota principal - servir o site
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Rota da API para buscar promoções
