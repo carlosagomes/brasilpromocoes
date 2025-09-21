@@ -607,7 +607,7 @@ function fillModalContent(modal, promocao) {
         
         ${createModalMandatarioInfo(promocao.mandatario)}
         ${createModalApuracoesInfo(promocao.apuracoes)}
-        ${createModalPremiosInfo(promocao.premios)}
+        ${createModalPremiosInfo(promocao.apuracoes)}
     `;
 }
 
@@ -651,18 +651,42 @@ function createModalApuracoesInfo(apuracoes) {
     let apuracoesHTML = '<div class="modal-section"><h3>Apurações</h3>';
     
     apuracoes.forEach((apuracao, index) => {
+        const enderecoCompleto = formatEnderecoApuracao(apuracao);
+        
         apuracoesHTML += `
             <div class="apuracao-item">
                 <h4>Apuração ${index + 1}</h4>
                 <div class="detail-grid">
                     <div class="detail-item">
-                        <span class="detail-label">Data:</span>
-                        <span class="detail-value">${formatDate(apuracao.dataApuração) || 'N/A'}</span>
+                        <span class="detail-label">ID:</span>
+                        <span class="detail-value">${apuracao.idApuracao || 'N/A'}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Local:</span>
-                        <span class="detail-value">${apuracao.local || 'N/A'}</span>
+                        <span class="detail-value">${apuracao.localApuracao || 'N/A'}</span>
                     </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Início da Apuração:</span>
+                        <span class="detail-value">${formatDate(apuracao.inicioApuracao) || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Fim da Apuração:</span>
+                        <span class="detail-value">${formatDate(apuracao.fimApuracao) || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Início da Participação:</span>
+                        <span class="detail-value">${formatDate(apuracao.inicioParticipacao) || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Fim da Participação:</span>
+                        <span class="detail-value">${formatDate(apuracao.fimParticipacao) || 'N/A'}</span>
+                    </div>
+                    ${enderecoCompleto ? `
+                    <div class="detail-item full-width">
+                        <span class="detail-label">Endereço:</span>
+                        <span class="detail-value">${enderecoCompleto}</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -672,16 +696,47 @@ function createModalApuracoesInfo(apuracoes) {
     return apuracoesHTML;
 }
 
+// Função para formatar endereço da apuração
+function formatEnderecoApuracao(apuracao) {
+    const parts = [];
+    
+    if (apuracao.endereco) parts.push(apuracao.endereco);
+    if (apuracao.numero) parts.push(apuracao.numero);
+    if (apuracao.complemento) parts.push(apuracao.complemento);
+    if (apuracao.bairro) parts.push(apuracao.bairro);
+    if (apuracao.cidade) parts.push(apuracao.cidade);
+    if (apuracao.uf) parts.push(apuracao.uf);
+    if (apuracao.cep) parts.push(apuracao.cep);
+    
+    return parts.length > 0 ? parts.join(', ') : '';
+}
+
 // Função para criar informações dos prêmios no modal
-function createModalPremiosInfo(premios) {
-    if (!premios || !Array.isArray(premios) || premios.length === 0) return '';
+function createModalPremiosInfo(apuracoes) {
+    if (!apuracoes || !Array.isArray(apuracoes) || apuracoes.length === 0) return '';
+    
+    // Coletar todos os prêmios de todas as apurações
+    let todosPremios = [];
+    apuracoes.forEach((apuracao, apuracaoIndex) => {
+        if (apuracao.premios && Array.isArray(apuracao.premios)) {
+            apuracao.premios.forEach((premio, premioIndex) => {
+                todosPremios.push({
+                    ...premio,
+                    apuracaoIndex: apuracaoIndex + 1,
+                    premioIndex: premioIndex + 1
+                });
+            });
+        }
+    });
+    
+    if (todosPremios.length === 0) return '';
     
     let premiosHTML = '<div class="modal-section"><h3>Prêmios</h3>';
     
-    premios.forEach((premio, index) => {
+    todosPremios.forEach((premio, index) => {
         premiosHTML += `
             <div class="premio-item">
-                <h4>Prêmio ${index + 1}</h4>
+                <h4>Prêmio ${index + 1} (Apuração ${premio.apuracaoIndex})</h4>
                 <div class="detail-grid">
                     <div class="detail-item">
                         <span class="detail-label">Descrição:</span>
@@ -692,9 +747,23 @@ function createModalPremiosInfo(premios) {
                         <span class="detail-value">${premio.quantidade || 'N/A'}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">Valor:</span>
-                        <span class="detail-value">${formatCurrency(premio.valor) || 'N/A'}</span>
+                        <span class="detail-label">Valor Unitário:</span>
+                        <span class="detail-value">${formatCurrency(premio.valor_unitario) || 'N/A'}</span>
                     </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Valor Total:</span>
+                        <span class="detail-value">${formatCurrency(premio.valor_total) || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Ordem:</span>
+                        <span class="detail-value">${premio.ordem || 'N/A'}</span>
+                    </div>
+                    ${premio.data_entrega ? `
+                    <div class="detail-item">
+                        <span class="detail-label">Data de Entrega:</span>
+                        <span class="detail-value">${formatDate(premio.data_entrega) || 'N/A'}</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
         `;
