@@ -47,6 +47,21 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Rota para servir CSS
+app.get('/styles.css', (req, res) => {
+  res.sendFile(path.join(__dirname, 'styles.css'));
+});
+
+// Rota para servir JS
+app.get('/script.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'script.js'));
+});
+
+// Rota para servir favicon
+app.get('/favicon.ico', (req, res) => {
+  res.status(404).end();
+});
+
 // Rota da API para buscar promoções
 app.get('/api/promocoes', async (req, res) => {
     try {
