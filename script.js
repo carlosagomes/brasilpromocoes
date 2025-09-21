@@ -1,5 +1,5 @@
 // Configuração da API
-const API_BASE_URL = 'https://api.scpc.estaleiro.serpro.gov.br/v1/promocao-comercial/export/json';
+const API_BASE_URL = '/api/promocoes';
 
 // Elementos do DOM
 const searchForm = document.getElementById('searchForm');
@@ -71,7 +71,7 @@ async function handleSearch(event) {
 
 // Função para buscar promoções na API
 async function fetchPromocoes(params) {
-    const url = new URL(API_BASE_URL);
+    const url = new URL(API_BASE_URL, window.location.origin);
     
     // Adicionar parâmetros à URL
     Object.keys(params).forEach(key => {
@@ -81,72 +81,35 @@ async function fetchPromocoes(params) {
     console.log('Buscando em:', url.toString());
     
     try {
-        // Tentar primeiro com proxy CORS
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url.toString())}`;
-        
-        console.log('Tentando com proxy:', proxyUrl);
-        
-        const response = await fetch(proxyUrl, {
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
         });
         
         if (!response.ok) {
-            throw new Error(`Proxy error! status: ${response.status}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const proxyData = await response.json();
-        
-        if (!proxyData.contents) {
-            throw new Error('Proxy retornou dados vazios');
-        }
-        
-        const data = JSON.parse(proxyData.contents);
-        console.log('Dados recebidos via proxy:', data);
+        const data = await response.json();
+        console.log('Dados recebidos:', data);
         
         return processApiResponse(data);
         
-    } catch (proxyError) {
-        console.error('Erro no proxy:', proxyError);
-        
-        // Fallback: tentar requisição direta
-        try {
-            console.log('Tentando requisição direta...');
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            console.log('Dados recebidos diretamente:', data);
-            
-            return processApiResponse(data);
-            
-        } catch (directError) {
-            console.error('Erro na requisição direta:', directError);
-            
-            // Último fallback: usar dados de exemplo para demonstração
-            console.log('Usando dados de exemplo...');
-            return getSampleData();
-        }
+    } catch (error) {
+        console.error('Erro na requisição:', error);
+        throw error;
     }
 }
 
 // Função para processar resposta da API
 function processApiResponse(data) {
-    if (Array.isArray(data)) {
-        return data;
-    } else if (data.promocoes && Array.isArray(data.promocoes)) {
+    if (data.promocoes && Array.isArray(data.promocoes)) {
         return data.promocoes;
+    } else if (Array.isArray(data)) {
+        return data;
     } else if (data.data && Array.isArray(data.data)) {
         return data.data;
     } else {
