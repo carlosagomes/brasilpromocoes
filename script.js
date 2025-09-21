@@ -215,6 +215,7 @@ function displayResults(promocoes) {
 function createPromocaoCard(promocao) {
     const card = document.createElement('div');
     card.className = 'promocao-card';
+    card.style.cursor = 'pointer';
     
     // Determinar status da promoção
     const status = promocao.situacao || 'N/A';
@@ -227,9 +228,13 @@ function createPromocaoCard(promocao) {
     // Formatar valores
     const valorTotal = formatCurrency(promocao.valorTotal);
     
+    // Informações básicas do mandatário
+    const mandatarioNome = promocao.mandatario?.nomeFantasia || promocao.mandatario?.razaoSocial || 'Nome não informado';
+    const mandatarioCnpj = promocao.mandatario?.cnpj ? formatCNPJDisplay(promocao.mandatario.cnpj) : 'N/A';
+    const mandatarioEndereco = formatEndereco(promocao.mandatario) || '';
+    
     card.innerHTML = `
         <div class="promocao-header">
-            <div class="promocao-numero">${promocao.numeroPromocao || 'N/A'}</div>
             <h3 class="promocao-nome">${promocao.nome || 'Nome não informado'}</h3>
             <div class="promocao-modalidade">
                 <i class="fas fa-trophy"></i>
@@ -237,40 +242,63 @@ function createPromocaoCard(promocao) {
             </div>
         </div>
         
-        <div class="promocao-details">
-            <div class="detail-row">
-                <span class="detail-label">Status:</span>
-                <span class="promocao-status ${statusClass}">${status}</span>
+        <div class="promocao-summary">
+            <div class="summary-row">
+                <div class="summary-item">
+                    <span class="summary-label">Status:</span>
+                    <span class="promocao-status ${statusClass}">${status}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Certificado:</span>
+                    <span class="summary-value">${promocao.numeroCA || 'N/A'}</span>
+                </div>
             </div>
-            <div class="detail-row">
-                <span class="detail-label">Certificado:</span>
-                <span class="detail-value">${promocao.numeroCA || 'N/A'}</span>
+            <div class="summary-row">
+                <div class="summary-item">
+                    <span class="summary-label">Data Início:</span>
+                    <span class="summary-value">${dataInicio}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Data Fim:</span>
+                    <span class="summary-value">${dataFim}</span>
+                </div>
             </div>
-            <div class="detail-row">
-                <span class="detail-label">Data Início:</span>
-                <span class="detail-value">${dataInicio}</span>
+            <div class="summary-row">
+                <div class="summary-item">
+                    <span class="summary-label">Prêmios:</span>
+                    <span class="summary-value">${promocao.quantidadePremios || 0}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Valor Total:</span>
+                    <span class="summary-value">${valorTotal}</span>
+                </div>
             </div>
-            <div class="detail-row">
-                <span class="detail-label">Data Fim:</span>
-                <span class="detail-value">${dataFim}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Prêmios:</span>
-                <span class="detail-value">${promocao.quantidadePremios || 0}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Valor Total:</span>
-                <span class="detail-value">${valorTotal}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Abrangência:</span>
-                <span class="detail-value">${promocao.abrangencia || 'N/A'}</span>
+            <div class="summary-row">
+                <div class="summary-item">
+                    <span class="summary-label">Abrangência:</span>
+                    <span class="summary-value">${promocao.abrangencia || 'N/A'}</span>
+                </div>
             </div>
         </div>
         
-        ${createMandatarioInfo(promocao.mandatario)}
-        ${createApuracoesInfo(promocao.apuracoes)}
+        <div class="mandatario-summary">
+            <div class="mandatario-nome">${mandatarioNome}</div>
+            <div class="mandatario-cnpj">CNPJ: ${mandatarioCnpj}</div>
+            ${mandatarioEndereco ? `<div class="mandatario-endereco">${mandatarioEndereco}</div>` : ''}
+        </div>
+        
+        <div class="card-footer">
+            <div class="click-hint">
+                <i class="fas fa-mouse-pointer"></i>
+                Clique para ver detalhes completos
+            </div>
+        </div>
     `;
+    
+    // Adicionar evento de clique para mostrar detalhes
+    card.addEventListener('click', () => {
+        showPromocaoDetails(promocao);
+    });
     
     return card;
 }
@@ -467,6 +495,222 @@ function clearFilters() {
     // Resetar para ano atual
     const currentYear = new Date().getFullYear();
     document.getElementById('anoPromocao').value = currentYear;
+}
+
+// Função para mostrar detalhes da promoção em modal
+function showPromocaoDetails(promocao) {
+    // Criar modal se não existir
+    let modal = document.getElementById('promocaoModal');
+    if (!modal) {
+        modal = createModal();
+        document.body.appendChild(modal);
+    }
+    
+    // Preencher conteúdo do modal
+    fillModalContent(modal, promocao);
+    
+    // Mostrar modal
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+// Função para criar estrutura do modal
+function createModal() {
+    const modal = document.createElement('div');
+    modal.id = 'promocaoModal';
+    modal.className = 'modal';
+    modal.style.display = 'none';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Detalhes da Promoção</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Conteúdo será preenchido dinamicamente -->
+            </div>
+        </div>
+    `;
+    
+    // Fechar modal ao clicar fora
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    
+    return modal;
+}
+
+// Função para preencher conteúdo do modal
+function fillModalContent(modal, promocao) {
+    const modalBody = modal.querySelector('#modalBody');
+    
+    // Formatar datas
+    const dataInicio = formatDate(promocao.dataInicio);
+    const dataFim = formatDate(promocao.dataFim);
+    const valorTotal = formatCurrency(promocao.valorTotal);
+    
+    modalBody.innerHTML = `
+        <div class="modal-section">
+            <h3>Informações Básicas</h3>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Número da Promoção:</span>
+                    <span class="detail-value">${promocao.numeroPromocao || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Nome:</span>
+                    <span class="detail-value">${promocao.nome || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Modalidade:</span>
+                    <span class="detail-value">${promocao.modalidade || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Status:</span>
+                    <span class="detail-value promocao-status ${getStatusClass(promocao.situacao)}">${promocao.situacao || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Certificado:</span>
+                    <span class="detail-value">${promocao.numeroCA || 'N/A'}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-section">
+            <h3>Período e Valores</h3>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Data de Início:</span>
+                    <span class="detail-value">${dataInicio}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Data de Fim:</span>
+                    <span class="detail-value">${dataFim}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Quantidade de Prêmios:</span>
+                    <span class="detail-value">${promocao.quantidadePremios || 0}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Valor Total:</span>
+                    <span class="detail-value">${valorTotal}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Abrangência:</span>
+                    <span class="detail-value">${promocao.abrangencia || 'N/A'}</span>
+                </div>
+            </div>
+        </div>
+        
+        ${createModalMandatarioInfo(promocao.mandatario)}
+        ${createModalApuracoesInfo(promocao.apuracoes)}
+        ${createModalPremiosInfo(promocao.premios)}
+    `;
+}
+
+// Função para criar informações do mandatário no modal
+function createModalMandatarioInfo(mandatario) {
+    if (!mandatario) return '';
+    
+    const endereco = formatEndereco(mandatario);
+    
+    return `
+        <div class="modal-section">
+            <h3>Informações do Mandatário</h3>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Razão Social:</span>
+                    <span class="detail-value">${mandatario.razaoSocial || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Nome Fantasia:</span>
+                    <span class="detail-value">${mandatario.nomeFantasia || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">CNPJ:</span>
+                    <span class="detail-value">${formatCNPJDisplay(mandatario.cnpj)}</span>
+                </div>
+                ${endereco ? `
+                <div class="detail-item full-width">
+                    <span class="detail-label">Endereço:</span>
+                    <span class="detail-value">${endereco}</span>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Função para criar informações das apurações no modal
+function createModalApuracoesInfo(apuracoes) {
+    if (!apuracoes || !Array.isArray(apuracoes) || apuracoes.length === 0) return '';
+    
+    let apuracoesHTML = '<div class="modal-section"><h3>Apurações</h3>';
+    
+    apuracoes.forEach((apuracao, index) => {
+        apuracoesHTML += `
+            <div class="apuracao-item">
+                <h4>Apuração ${index + 1}</h4>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">Data:</span>
+                        <span class="detail-value">${formatDate(apuracao.dataApuração) || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Local:</span>
+                        <span class="detail-value">${apuracao.local || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    apuracoesHTML += '</div>';
+    return apuracoesHTML;
+}
+
+// Função para criar informações dos prêmios no modal
+function createModalPremiosInfo(premios) {
+    if (!premios || !Array.isArray(premios) || premios.length === 0) return '';
+    
+    let premiosHTML = '<div class="modal-section"><h3>Prêmios</h3>';
+    
+    premios.forEach((premio, index) => {
+        premiosHTML += `
+            <div class="premio-item">
+                <h4>Prêmio ${index + 1}</h4>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">Descrição:</span>
+                        <span class="detail-value">${premio.descricao || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Quantidade:</span>
+                        <span class="detail-value">${premio.quantidade || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Valor:</span>
+                        <span class="detail-value">${formatCurrency(premio.valor) || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    premiosHTML += '</div>';
+    return premiosHTML;
+}
+
+// Função para fechar modal
+function closeModal() {
+    const modal = document.getElementById('promocaoModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
 }
 
 function retrySearch() {

@@ -259,7 +259,7 @@ body {
     background: white;
     border: 2px solid #f1f3f4;
     border-radius: 15px;
-    padding: 25px;
+    padding: 20px;
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
@@ -282,22 +282,11 @@ body {
 }
 
 .promocao-header {
-    margin-bottom: 20px;
-}
-
-.promocao-numero {
-    background: #f8f9fa;
-    color: #667eea;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    display: inline-block;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
 }
 
 .promocao-nome {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     font-weight: 600;
     color: #333;
     margin-bottom: 8px;
@@ -316,34 +305,75 @@ body {
     font-weight: 500;
 }
 
-.promocao-details {
-    margin-bottom: 20px;
+.promocao-summary {
+    margin-bottom: 15px;
 }
 
-.detail-row {
+.summary-row {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid #f1f3f4;
+    gap: 15px;
+    margin-bottom: 10px;
 }
 
-.detail-row:last-child {
-    border-bottom: none;
+.summary-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.detail-label {
+.summary-label {
     font-weight: 500;
     color: #666;
+    font-size: 0.8rem;
+}
+
+.summary-value {
+    color: #333;
+    font-weight: 600;
     font-size: 0.9rem;
 }
 
-.detail-value {
-    color: #333;
+.mandatario-summary {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.mandatario-nome {
     font-weight: 600;
-    text-align: right;
-    max-width: 60%;
-    word-break: break-word;
+    color: #333;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.mandatario-cnpj {
+    color: #666;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+}
+
+.mandatario-endereco {
+    color: #666;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.card-footer {
+    text-align: center;
+    padding-top: 10px;
+    border-top: 1px solid #f1f3f4;
+}
+
+.click-hint {
+    color: #667eea;
+    font-size: 0.8rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .promocao-status {
@@ -467,6 +497,151 @@ body {
     color: #666;
 }
 
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 20px;
+    max-width: 800px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 25px 30px;
+    border-bottom: 2px solid #f1f3f4;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 20px 20px 0 0;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 2rem;
+    cursor: pointer;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+}
+
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-body {
+    padding: 30px;
+}
+
+.modal-section {
+    margin-bottom: 30px;
+}
+
+.modal-section:last-child {
+    margin-bottom: 0;
+}
+
+.modal-section h3 {
+    color: #333;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f1f3f4;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.detail-label {
+    font-weight: 500;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.detail-value {
+    color: #333;
+    font-weight: 600;
+    font-size: 1rem;
+    word-break: break-word;
+}
+
+.apuracao-item,
+.premio-item {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.apuracao-item:last-child,
+.premio-item:last-child {
+    margin-bottom: 0;
+}
+
+.apuracao-item h4,
+.premio-item h4 {
+    color: #333;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
 /* Utility Classes */
 .hidden {
     display: none !important;
@@ -524,6 +699,42 @@ body {
     .detail-value {
         text-align: left;
         max-width: 100%;
+    }
+
+    .summary-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .summary-item {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal {
+        padding: 10px;
+    }
+
+    .modal-content {
+        max-height: 95vh;
+    }
+
+    .modal-header {
+        padding: 20px;
+    }
+
+    .modal-header h2 {
+        font-size: 1.3rem;
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
     }
 }
 
