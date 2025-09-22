@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Máscara para CNPJ
     const cnpjInput = document.getElementById('cnpjMandatario');
     cnpjInput.addEventListener('input', formatCNPJ);
+    cnpjInput.addEventListener('paste', handleCNPJPaste);
 });
 
 // Função principal de busca
@@ -413,22 +414,29 @@ function formatCNPJ(cnpj) {
     // Limita a 14 dígitos
     const limited = numbers.substring(0, 14);
     
-    // Aplica a máscara
+    // Aplica a máscara progressivamente
     let formatted = limited;
     if (limited.length > 2) {
         formatted = limited.substring(0, 2) + '.' + limited.substring(2);
     }
     if (limited.length > 5) {
-        formatted = formatted.substring(0, 6) + '.' + limited.substring(5);
+        formatted = limited.substring(0, 2) + '.' + limited.substring(2, 5) + '.' + limited.substring(5);
     }
     if (limited.length > 8) {
-        formatted = formatted.substring(0, 10) + '/' + limited.substring(8);
+        formatted = limited.substring(0, 2) + '.' + limited.substring(2, 5) + '.' + limited.substring(5, 8) + '/' + limited.substring(8);
     }
     if (limited.length > 12) {
-        formatted = formatted.substring(0, 15) + '-' + limited.substring(12);
+        formatted = limited.substring(0, 2) + '.' + limited.substring(2, 5) + '.' + limited.substring(5, 8) + '/' + limited.substring(8, 12) + '-' + limited.substring(12);
     }
     
     cnpj.value = formatted;
+}
+
+function handleCNPJPaste(event) {
+    // Aguarda um pouco para o valor ser colado no campo
+    setTimeout(() => {
+        formatCNPJ(event.target);
+    }, 10);
 }
 
 function formatCNPJDisplay(cnpj) {
