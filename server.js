@@ -117,7 +117,10 @@ app.get('/api/promocoes', async (req, res) => {
       // Adicionar parâmetros
       if (anoPromocao) apiUrl.searchParams.append('anoPromocao', anoPromocao);
       if (uf) apiUrl.searchParams.append('uf', uf);
-      if (cnpjMandatario) apiUrl.searchParams.append('cnpjMandatario', cnpjMandatario);
+      if (cnpjMandatario) {
+        console.log(`CNPJ recebido no servidor: ${cnpjMandatario}`);
+        apiUrl.searchParams.append('cnpjMandatario', cnpjMandatario);
+      }
       if (nomeMandatario) apiUrl.searchParams.append('nomeMandatario', nomeMandatario);
       if (modalidade) apiUrl.searchParams.append('modalidade', modalidade);
       if (numeroCertificado) apiUrl.searchParams.append('numeroCertificado', numeroCertificado);

@@ -45,7 +45,14 @@ async function handleSearch(event) {
     // Coletar parâmetros do formulário
     for (const [key, value] of formData.entries()) {
         if (value.trim() !== '') {
-            searchParams[key] = value.trim();
+            // Limpar CNPJ removendo formatação antes de enviar
+            if (key === 'cnpjMandatario') {
+                const cleanedCNPJ = cleanCNPJ(value);
+                searchParams[key] = cleanedCNPJ;
+                console.log(`CNPJ original: ${value} -> CNPJ limpo: ${cleanedCNPJ}`);
+            } else {
+                searchParams[key] = value.trim();
+            }
         }
     }
     
@@ -437,6 +444,11 @@ function handleCNPJPaste(event) {
     setTimeout(() => {
         formatCNPJ(event.target);
     }, 10);
+}
+
+function cleanCNPJ(cnpj) {
+    // Remove todos os caracteres não numéricos do CNPJ
+    return cnpj.replace(/\D/g, '');
 }
 
 function formatCNPJDisplay(cnpj) {
