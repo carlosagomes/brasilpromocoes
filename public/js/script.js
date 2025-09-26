@@ -13,9 +13,16 @@ const resultsCount = document.getElementById('resultsCount');
 const errorMessage = document.getElementById('errorMessage');
 const retryButton = document.getElementById('retryButton');
 const clearFiltersButton = document.getElementById('clearFilters');
+const paginationContainer = document.getElementById('paginationContainer');
+const paginationInfo = document.getElementById('paginationInfo');
+const prevPageBtn = document.getElementById('prevPage');
+const nextPageBtn = document.getElementById('nextPage');
+const pageNumbers = document.getElementById('pageNumbers');
 
 // Estado da aplicação
 let currentPromocoes = [];
+let currentPagination = null;
+let currentPage = 1;
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
@@ -28,6 +35,8 @@ document.addEventListener('DOMContentLoaded', function() {
     searchForm.addEventListener('submit', handleSearch);
     clearFiltersButton.addEventListener('click', clearFilters);
     retryButton.addEventListener('click', retrySearch);
+    prevPageBtn.addEventListener('click', () => changePage(currentPage - 1));
+    nextPageBtn.addEventListener('click', () => changePage(currentPage + 1));
     
     // Máscara para CNPJ
     const cnpjInput = document.getElementById('cnpjMandatario');
@@ -38,6 +47,10 @@ document.addEventListener('DOMContentLoaded', function() {
 // Função principal de busca
 async function handleSearch(event) {
     event.preventDefault();
+    
+    // Resetar página atual para 1 em nova busca
+    currentPage = 1;
+    currentPagination = null;
     
     const formData = new FormData(searchForm);
     const searchParams = {};
@@ -55,6 +68,10 @@ async function handleSearch(event) {
             }
         }
     }
+    
+    // Adicionar parâmetros de paginação
+    searchParams.page = 1; // Sempre começar na página 1
+    searchParams.limit = 100;
     
     console.log('Parâmetros de busca:', searchParams);
     
@@ -114,18 +131,33 @@ async function fetchPromocoes(params) {
 
 // Função para processar resposta da API
 function processApiResponse(data) {
+    console.log('=== PROCESS API RESPONSE ===');
+    console.log('Data recebida:', data);
+    
+    // Se tem promoções e paginação, retornar o objeto completo
+    if (data.promocoes && Array.isArray(data.promocoes) && data.pagination) {
+        console.log('Retornando objeto completo com paginação');
+        return data;
+    }
+    
+    // Se tem promoções mas sem paginação, retornar apenas as promoções
     if (data.promocoes && Array.isArray(data.promocoes)) {
+        console.log('Retornando apenas promoções (sem paginação)');
         return data.promocoes;
     } else if (Array.isArray(data)) {
+        console.log('Retornando array direto');
         return data;
     } else if (data.data && Array.isArray(data.data)) {
+        console.log('Retornando data.data');
         return data.data;
     } else {
         // Se não for um array, tentar encontrar propriedades que contenham arrays
         const possibleArrays = Object.values(data).filter(value => Array.isArray(value));
         if (possibleArrays.length > 0) {
+            console.log('Retornando primeiro array encontrado');
             return possibleArrays[0];
         }
+        console.log('Retornando array vazio');
         return [];
     }
 }
@@ -183,8 +215,17 @@ function getSampleData() {
 }
 
 // Função para exibir resultados
-function displayResults(promocoes) {
+function displayResults(data) {
     hideAllStates();
+    
+    console.log('=== DISPLAY RESULTS ===');
+    console.log('Dados recebidos:', data);
+    
+    const promocoes = data.promocoes || data;
+    const pagination = data.pagination;
+    console.log('Data:', data);
+    console.log('Promoções:', promocoes.length);
+    console.log('Paginação:', pagination);
     
     if (promocoes.length === 0) {
         showEmptyState();
@@ -192,7 +233,28 @@ function displayResults(promocoes) {
     }
     
     resultsSection.classList.remove('hidden');
-    resultsCount.textContent = promocoes.length;
+    resultsCount.textContent = pagination ? pagination.totalRecords : promocoes.length;
+    
+    // Atualizar estado da paginação
+    if (pagination) {
+        currentPagination = pagination;
+        currentPage = pagination.currentPage;
+        console.log('=== ATUALIZANDO PAGINAÇÃO ===');
+        console.log('currentPagination:', currentPagination);
+        updatePagination();
+    } else {
+        console.log('Sem dados de paginação');
+        paginationContainer.classList.add('hidden');
+    }
+    
+    // Forçar exibição da paginação para debug
+    if (pagination && pagination.totalPages > 1) {
+        console.log('=== FORÇANDO EXIBIÇÃO ===');
+        paginationContainer.classList.remove('hidden');
+        paginationContainer.style.display = 'flex';
+        console.log('Container de paginação:', paginationContainer);
+        console.log('Classes do container:', paginationContainer.className);
+    }
     
     // Limpar container anterior
     promocoesContainer.innerHTML = '';
@@ -511,6 +573,8 @@ function clearFilters() {
     searchForm.reset();
     hideAllStates();
     currentPromocoes = [];
+    currentPagination = null;
+    currentPage = 1;
     
     // Resetar para ano atual
     const currentYear = new Date().getFullYear();
@@ -545,13 +609,22 @@ function createModal() {
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Detalhes da Promoção</h2>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
             </div>
             <div class="modal-body" id="modalBody">
                 <!-- Conteúdo será preenchido dinamicamente -->
             </div>
         </div>
     `;
+    
+    // Adicionar event listener para o botão de fechar
+    const closeBtn = modal.querySelector('#modalCloseBtn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeModal);
+        console.log('Event listener adicionado ao botão de fechar');
+    } else {
+        console.log('ERRO: Botão de fechar não encontrado!');
+    }
     
     // Fechar modal ao clicar fora
     modal.addEventListener('click', (e) => {
@@ -795,10 +868,17 @@ function createModalPremiosInfo(apuracoes) {
 
 // Função para fechar modal
 function closeModal() {
+    console.log('=== CLOSE MODAL ===');
     const modal = document.getElementById('promocaoModal');
+    console.log('Modal encontrado:', modal);
+    
     if (modal) {
+        console.log('Fechando modal...');
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
+        console.log('Modal fechado com sucesso');
+    } else {
+        console.log('ERRO: Modal não encontrado!');
     }
 }
 
@@ -814,6 +894,149 @@ function retrySearch() {
 function handleCORS() {
     // Se houver problemas de CORS, podemos implementar um proxy
     console.log('Implementando proxy para CORS se necessário');
+}
+
+// Funções de paginação
+function updatePagination() {
+    console.log('=== UPDATE PAGINATION ===');
+    console.log('currentPagination:', currentPagination);
+    console.log('paginationContainer:', paginationContainer);
+    console.log('paginationInfo:', paginationInfo);
+    
+    if (!currentPagination) {
+        console.log('Sem paginação, escondendo container');
+        paginationContainer.classList.add('hidden');
+        return;
+    }
+    
+    console.log('Mostrando container de paginação');
+    paginationContainer.classList.remove('hidden');
+    paginationContainer.style.display = 'flex';
+    
+    // Atualizar informações da paginação
+    if (paginationInfo) {
+        paginationInfo.textContent = `Página ${currentPagination.currentPage} de ${currentPagination.totalPages}`;
+        console.log('Info da paginação:', paginationInfo.textContent);
+    } else {
+        console.log('ERRO: paginationInfo não encontrado!');
+    }
+    
+    // Atualizar botões
+    if (prevPageBtn) {
+        prevPageBtn.disabled = !currentPagination.hasPrevPage;
+        console.log('Botão Anterior:', !prevPageBtn.disabled);
+    } else {
+        console.log('ERRO: prevPageBtn não encontrado!');
+    }
+    
+    if (nextPageBtn) {
+        nextPageBtn.disabled = !currentPagination.hasNextPage;
+        console.log('Botão Próxima:', !nextPageBtn.disabled);
+    } else {
+        console.log('ERRO: nextPageBtn não encontrado!');
+    }
+    
+    // Atualizar números das páginas
+    updatePageNumbers();
+}
+
+function updatePageNumbers() {
+    pageNumbers.innerHTML = '';
+    
+    const current = currentPagination.currentPage;
+    const total = currentPagination.totalPages;
+    const maxVisible = 5; // Máximo de números visíveis
+    
+    let start = Math.max(1, current - Math.floor(maxVisible / 2));
+    let end = Math.min(total, start + maxVisible - 1);
+    
+    // Ajustar início se estivermos no final
+    if (end - start + 1 < maxVisible) {
+        start = Math.max(1, end - maxVisible + 1);
+    }
+    
+    // Adicionar botão "Primeira página" se necessário
+    if (start > 1) {
+        addPageNumber(1);
+        if (start > 2) {
+            addEllipsis();
+        }
+    }
+    
+    // Adicionar números das páginas
+    for (let i = start; i <= end; i++) {
+        addPageNumber(i);
+    }
+    
+    // Adicionar botão "Última página" se necessário
+    if (end < total) {
+        if (end < total - 1) {
+            addEllipsis();
+        }
+        addPageNumber(total);
+    }
+}
+
+function addPageNumber(pageNum) {
+    const pageBtn = document.createElement('button');
+    pageBtn.className = 'page-number';
+    pageBtn.textContent = pageNum;
+    pageBtn.addEventListener('click', () => changePage(pageNum));
+    
+    if (pageNum === currentPage) {
+        pageBtn.classList.add('active');
+    }
+    
+    pageNumbers.appendChild(pageBtn);
+}
+
+function addEllipsis() {
+    const ellipsis = document.createElement('span');
+    ellipsis.className = 'page-number ellipsis';
+    ellipsis.textContent = '...';
+    pageNumbers.appendChild(ellipsis);
+}
+
+function changePage(page) {
+    if (!currentPagination || page < 1 || page > currentPagination.totalPages) {
+        return;
+    }
+    
+    currentPage = page;
+    
+    // Fazer nova busca com a página selecionada
+    const formData = new FormData(searchForm);
+    const searchParams = {};
+    
+    // Coletar parâmetros do formulário
+    for (const [key, value] of formData.entries()) {
+        if (value.trim() !== '') {
+            if (key === 'cnpjMandatario') {
+                const cleanedCNPJ = cleanCNPJ(value);
+                searchParams[key] = cleanedCNPJ;
+            } else {
+                searchParams[key] = value.trim();
+            }
+        }
+    }
+    
+    // Adicionar parâmetros de paginação
+    searchParams.page = currentPage;
+    searchParams.limit = 100;
+    
+    // Fazer a busca
+    console.log('=== CHANGE PAGE ===');
+    console.log('Mudando para página:', currentPage);
+    console.log('Parâmetros:', searchParams);
+    
+    fetchPromocoes(searchParams).then(data => {
+        console.log('Dados recebidos na mudança de página:', data);
+        currentPromocoes = data.promocoes || data;
+        displayResults(data);
+    }).catch(error => {
+        console.error('Erro ao buscar promoções:', error);
+        showError(`Erro ao buscar promoções: ${error.message}`);
+    });
 }
 
 // Inicializar tratamento de CORS

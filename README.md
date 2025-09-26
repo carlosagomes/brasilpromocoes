@@ -15,39 +15,63 @@ Site moderno para busca de promoções comerciais autorizadas no Brasil, baseado
 
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
 - **Backend**: Node.js, Express.js
-- **API**: Integração com SCPC API
+- **Banco de Dados**: MySQL
 - **Estilização**: CSS moderno com animações
-- **Deploy**: Vercel
+- **Deploy**: Docker
 
-## 🚀 Deploy no Vercel
+## ⚙️ Configuração
 
-### Opção 1: Deploy via Vercel CLI
+### 1. Instalar Dependências
+```bash
+npm install
+```
 
-1. **Instale o Vercel CLI**
-   ```bash
-   npm i -g vercel
-   ```
+### 2. Configurar Variáveis de Ambiente
+```bash
+# Copiar arquivo de exemplo
+cp .env.example .env
 
-2. **Faça login**
-   ```bash
-   vercel login
-   ```
+# Editar o arquivo .env com suas credenciais
+nano .env
+```
 
-3. **Deploy**
-   ```bash
-   vercel
-   ```
+### 3. Variáveis de Ambiente Obrigatórias
+```env
+# Configurações do Banco de Dados MySQL
+DB_HOST=seu_host_mysql
+DB_PORT=3306
+DB_DATABASE=nome_do_banco
+DB_USER=usuario_mysql
+DB_PASSWORD=senha_mysql
 
-4. **Deploy de produção**
-   ```bash
-   vercel --prod
-   ```
+# Configurações da Aplicação
+PORT=3000
+NODE_ENV=development
+```
 
-### Opção 2: Deploy via GitHub
+### 4. Executar a Aplicação
+```bash
+# Desenvolvimento
+npm start
 
-1. **Conecte seu repositório ao Vercel**
-2. **Configure as variáveis de ambiente** (se necessário)
-3. **Deploy automático** a cada push
+# Produção
+npm run start:prod
+```
+
+## 🐳 Deploy com Docker
+
+### 1. Construir e executar com Docker Compose
+```bash
+# Construir e executar
+docker-compose up --build -d
+
+# Parar os containers
+docker-compose down
+```
+
+### 2. Acessar a aplicação
+- **URL**: http://localhost:3000
+- **API Health**: http://localhost:3000/api/health
 
 ## 📱 Como Usar
 
@@ -77,14 +101,21 @@ Site moderno para busca de promoções comerciais autorizadas no Brasil, baseado
 
 ```
 brasil-promocoes/
-├── server.js          # Servidor Express
+├── .env               # Variáveis de ambiente (não commitado)
+├── .env.example       # Template de variáveis de ambiente
+├── .dockerignore      # Arquivos ignorados no Docker
+├── .gitignore         # Arquivos ignorados no Git
+├── config.js          # Configurações do banco de dados
+├── database.js        # Lógica de acesso ao banco MySQL
+├── docker-compose.yml # Configuração Docker Compose
+├── Dockerfile         # Imagem Docker
 ├── index.html         # Página principal
-├── styles.css         # Estilos CSS
-├── script.js          # Lógica frontend
 ├── package.json       # Dependências Node.js
-├── vercel.json        # Configuração Vercel
-├── .gitignore         # Arquivos ignorados
-└── README.md          # Este arquivo
+├── package-lock.json  # Lock das dependências
+├── README.md          # Este arquivo
+├── script.js          # Lógica frontend JavaScript
+├── server.js          # Servidor Express
+└── styles.css         # Estilos CSS
 ```
 
 ## 🔌 API Endpoints

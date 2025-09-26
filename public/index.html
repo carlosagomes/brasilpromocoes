@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Brasil Promoções - Busca de Promoções Comerciais</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -171,6 +171,26 @@
             <div id="promocoesContainer" class="promocoes-container">
                 <!-- Promoções serão inseridas aqui via JavaScript -->
             </div>
+            
+            <!-- Paginação -->
+            <div id="paginationContainer" class="pagination-container hidden">
+                <div class="pagination-info">
+                    <span id="paginationInfo">Página 1 de 1</span>
+                </div>
+                <div class="pagination-controls">
+                    <button id="prevPage" class="pagination-btn" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                        Anterior
+                    </button>
+                    <div id="pageNumbers" class="page-numbers">
+                        <!-- Números das páginas serão inseridos aqui -->
+                    </div>
+                    <button id="nextPage" class="pagination-btn" disabled>
+                        Próxima
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
         </section>
 
         <!-- Error State -->
@@ -192,6 +212,6 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="js/script.js"></script>
 </body>
 </html>
