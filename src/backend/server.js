@@ -8,7 +8,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
-const { buscarPromocoesCompletas, testConnection, closePool } = require('./database');
+const { buscarPromocoesCompletas, testConnection, closePool, buscarDadosDashboard } = require('./database');
 const { appConfig } = require('./config');
 
 const app = express();
@@ -24,7 +24,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://api.scpc.estaleiro.serpro.gov.br"]
     }
@@ -203,6 +203,30 @@ app.get('/api/cache/stats', (req, res) => {
 app.delete('/api/cache', (req, res) => {
   cache.clear();
   res.json({ message: 'Cache limpo com sucesso' });
+});
+
+// Rota para dashboard
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const { anoFiltro, tipoAbrangencia } = req.query;
+    
+    console.log('📊 Dashboard - Parâmetros:', { anoFiltro, tipoAbrangencia });
+    
+    // Buscar dados para dashboard
+    const dashboardData = await buscarDadosDashboard({
+      ano: anoFiltro,
+      tipoAbrangencia: tipoAbrangencia
+    });
+    
+    res.json(dashboardData);
+    
+  } catch (error) {
+    console.error('Erro ao buscar dados do dashboard:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
 });
 
 // Rota de health check

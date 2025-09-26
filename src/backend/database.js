@@ -433,6 +433,241 @@ async function closePool() {
   }
 }
 
+// Função para buscar dados do dashboard
+async function buscarDadosDashboard(filtros = {}) {
+  try {
+    console.log('📊 Buscando dados do dashboard...');
+    
+    // 1. Resumo geral
+    const summary = await buscarResumoDashboard(filtros);
+    
+    // 2. Campanhas por estado
+    const estados = await buscarCampanhasPorEstado(filtros);
+    
+    // 3. Valores por mês
+    const valoresPorMes = await buscarValoresPorMes(filtros);
+    
+    // 4. Campanhas por ano
+    const campanhasPorAno = await buscarCampanhasPorAno(filtros);
+    
+    // 5. Top 10 CNPJs
+    const topCnpjs = await buscarTopCnpjs(filtros);
+    
+    return {
+      summary,
+      estados,
+      valoresPorMes,
+      campanhasPorAno,
+      topCnpjs
+    };
+    
+  } catch (error) {
+    console.error('Erro ao buscar dados do dashboard:', error);
+    throw error;
+  }
+}
+
+// Função para buscar resumo do dashboard
+async function buscarResumoDashboard(filtros = {}) {
+  try {
+    let query = `
+      SELECT 
+        COUNT(*) as totalCampanhas,
+        SUM(c.ValorTotal) as valorTotal,
+        COUNT(DISTINCT c.AbrangenciaEstados) as estadosAtendidos,
+        COUNT(DISTINCT c.MandatarioId) as totalMandatarios
+      FROM Campanha c
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    if (filtros.ano) {
+      query += ` AND YEAR(c.DataInicio) = ?`;
+      params.push(filtros.ano);
+    }
+    
+    if (filtros.tipoAbrangencia === 'nacional') {
+      query += ` AND c.AbrangenciaNacional = 1`;
+    } else if (filtros.tipoAbrangencia === 'estadual') {
+      query += ` AND c.AbrangenciaNacional = 0`;
+    }
+    
+    console.log('📊 Query resumo:', query);
+    console.log('📊 Parâmetros:', params);
+    
+    const [rows] = await pool.execute(query, params);
+    const result = rows[0];
+    
+    return {
+      totalCampanhas: result.totalCampanhas || 0,
+      valorTotal: result.valorTotal || 0,
+      estadosAtendidos: result.estadosAtendidos || 0,
+      totalMandatarios: result.totalMandatarios || 0
+    };
+    
+  } catch (error) {
+    console.error('Erro ao buscar resumo do dashboard:', error);
+    throw error;
+  }
+}
+
+// Função para buscar campanhas por estado
+async function buscarCampanhasPorEstado(filtros = {}) {
+  try {
+    let query = `
+      SELECT 
+        CASE 
+          WHEN c.AbrangenciaNacional = 1 THEN 'Nacional'
+          ELSE COALESCE(c.AbrangenciaEstados, 'Não informado')
+        END as estado,
+        COUNT(*) as total
+      FROM Campanha c
+      WHERE c.SituacaoAtual = 'AUTORIZADA'
+    `;
+    
+    const params = [];
+    
+    if (filtros.ano) {
+      query += ` AND YEAR(c.DataInicio) = ?`;
+      params.push(filtros.ano);
+    }
+    
+    if (filtros.tipoAbrangencia === 'nacional') {
+      query += ` AND c.AbrangenciaNacional = 1`;
+    } else if (filtros.tipoAbrangencia === 'estadual') {
+      query += ` AND c.AbrangenciaNacional = 0`;
+    }
+    
+    query += ` GROUP BY estado ORDER BY total DESC`;
+    
+    console.log('📊 Query estados:', query);
+    console.log('📊 Parâmetros:', params);
+    
+    const [rows] = await pool.execute(query, params);
+    return rows;
+    
+  } catch (error) {
+    console.error('Erro ao buscar campanhas por estado:', error);
+    throw error;
+  }
+}
+
+// Função para buscar valores por mês
+async function buscarValoresPorMes(filtros = {}) {
+  try {
+    let query = `
+      SELECT 
+        MONTHNAME(c.DataInicio) as mes,
+        MONTH(c.DataInicio) as mesNum,
+        SUM(c.ValorTotal) as valor,
+        COUNT(*) as totalCampanhas
+      FROM Campanha c
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    if (filtros.ano) {
+      query += ` AND YEAR(c.DataInicio) = ?`;
+      params.push(filtros.ano);
+    }
+    
+    if (filtros.tipoAbrangencia === 'nacional') {
+      query += ` AND c.AbrangenciaNacional = 1`;
+    } else if (filtros.tipoAbrangencia === 'estadual') {
+      query += ` AND c.AbrangenciaNacional = 0`;
+    }
+    
+    query += ` GROUP BY MONTH(c.DataInicio), MONTHNAME(c.DataInicio) ORDER BY mesNum`;
+    
+    console.log('📊 Query valores por mês:', query);
+    console.log('📊 Parâmetros:', params);
+    
+    const [rows] = await pool.execute(query, params);
+    return rows;
+    
+  } catch (error) {
+    console.error('Erro ao buscar valores por mês:', error);
+    throw error;
+  }
+}
+
+// Função para buscar campanhas por ano
+async function buscarCampanhasPorAno(filtros = {}) {
+  try {
+    let query = `
+      SELECT 
+        YEAR(c.DataInicio) as ano,
+        COUNT(*) as total
+      FROM Campanha c
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    if (filtros.tipoAbrangencia === 'nacional') {
+      query += ` AND c.AbrangenciaNacional = 1`;
+    } else if (filtros.tipoAbrangencia === 'estadual') {
+      query += ` AND c.AbrangenciaNacional = 0`;
+    }
+    
+    query += ` GROUP BY YEAR(c.DataInicio) ORDER BY ano DESC`;
+    
+    console.log('📊 Query campanhas por ano:', query);
+    console.log('📊 Parâmetros:', params);
+    
+    const [rows] = await pool.execute(query, params);
+    return rows;
+    
+  } catch (error) {
+    console.error('Erro ao buscar campanhas por ano:', error);
+    throw error;
+  }
+}
+
+// Função para buscar top CNPJs
+async function buscarTopCnpjs(filtros = {}) {
+  try {
+    let query = `
+      SELECT 
+        m.MandatarioId,
+        m.NomeFantasia,
+        m.RazaoSocial,
+        m.CNPJ,
+        COUNT(c.CampanhaId) as total
+      FROM Campanha c
+      INNER JOIN Mandatario m ON c.MandatarioId = m.MandatarioId
+      WHERE c.SituacaoAtual = 'AUTORIZADA'
+    `;
+    
+    const params = [];
+    
+    if (filtros.ano) {
+      query += ` AND YEAR(c.DataInicio) = ?`;
+      params.push(filtros.ano);
+    }
+    
+    if (filtros.tipoAbrangencia === 'nacional') {
+      query += ` AND c.AbrangenciaNacional = 1`;
+    } else if (filtros.tipoAbrangencia === 'estadual') {
+      query += ` AND c.AbrangenciaNacional = 0`;
+    }
+    
+    query += ` GROUP BY m.MandatarioId, m.NomeFantasia, m.RazaoSocial ORDER BY total DESC LIMIT 10`;
+    
+    console.log('📊 Query top CNPJs:', query);
+    console.log('📊 Parâmetros:', params);
+    
+    const [rows] = await pool.execute(query, params);
+    return rows;
+    
+  } catch (error) {
+    console.error('Erro ao buscar top CNPJs:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   testConnection,
   buscarCampanhas,
@@ -442,5 +677,6 @@ module.exports = {
   buscarSituacaoHistorico,
   buscarRegulamentoHistorico,
   buscarPromocoesCompletas,
+  buscarDadosDashboard,
   closePool
 };

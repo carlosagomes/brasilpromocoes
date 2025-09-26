@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Brasil Promoções</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script>
+        // Fallback para Chart.js caso o CDN falhe
+        window.addEventListener('load', function() {
+            if (typeof Chart === 'undefined') {
+                console.warn('CDN principal falhou, tentando CDN alternativo...');
+                loadChartJSFallback();
+            }
+        });
+        
+        function loadChartJSFallback() {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js';
+            script.onload = function() {
+                console.log('Chart.js carregado do CDN alternativo!');
+                if (typeof initializeDashboard === 'function') {
+                    initializeDashboard();
+                }
+            };
+            script.onerror = function() {
+                console.error('Ambos os CDNs falharam');
+                if (document.getElementById('errorState')) {
+                    document.getElementById('errorState').classList.remove('hidden');
+                    document.getElementById('errorMessage').textContent = 'Erro ao carregar biblioteca de gráficos. Verifique sua conexão com a internet.';
+                }
+            };
+            document.head.appendChild(script);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-chart-line"></i> Dashboard de Campanhas</h1>
+                <nav class="nav-links">
+                    <a href="index.html" class="nav-link">
+                        <i class="fas fa-search"></i> Buscar Campanhas
+                    </a>
+                    <a href="dashboard.html" class="nav-link active">
+                        <i class="fas fa-chart-line"></i> Dashboard
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Filtros -->
+        <section class="filters-section">
+            <div class="filters-container">
+                <h2><i class="fas fa-filter"></i> Filtros</h2>
+                <form id="dashboardFilters" class="filters-form">
+                    <div class="filter-group">
+                        <label for="anoFiltro">Ano:</label>
+                        <select id="anoFiltro" name="anoFiltro">
+                            <option value="">Todos os anos</option>
+                            <option value="2025" selected>2025</option>
+                            <option value="2024">2024</option>
+                            <option value="2023">2023</option>
+                            <option value="2022">2022</option>
+                            <option value="2021">2021</option>
+                            <option value="2020">2020</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="tipoAbrangencia">Tipo de Abrangência:</label>
+                        <select id="tipoAbrangencia" name="tipoAbrangencia">
+                            <option value="">Todos</option>
+                            <option value="nacional">Nacional</option>
+                            <option value="estadual">Por Estado</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-sync-alt"></i> Atualizar Dashboard
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state">
+            <div class="loading-spinner"></div>
+            <p>Carregando dados do dashboard...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="error-state hidden">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h3>Erro ao carregar dashboard</h3>
+            <p id="errorMessage">Ocorreu um erro ao carregar os dados. Tente novamente.</p>
+            <button id="retryButton" class="btn btn-primary">
+                <i class="fas fa-redo"></i> Tentar Novamente
+            </button>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboardContent" class="dashboard-content hidden">
+            <!-- Cards de Resumo -->
+            <section class="summary-cards">
+                <div class="card summary-card">
+                    <div class="card-icon">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="totalCampanhas">-</h3>
+                        <p>Total de Campanhas</p>
+                    </div>
+                </div>
+                <div class="card summary-card">
+                    <div class="card-icon">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="valorTotal">-</h3>
+                        <p>Valor Total (R$)</p>
+                    </div>
+                </div>
+                <div class="card summary-card">
+                    <div class="card-icon">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 id="totalMandatarios">-</h3>
+                        <p>Total de Mandatários</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Gráficos -->
+            <section class="charts-section">
+                <!-- Gráfico de Campanhas por Estado -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-map"></i> Campanhas por Estado</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="estadosChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Valores por Mês -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-line"></i> Valores por Mês</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="valoresChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Campanhas por Ano -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-bar"></i> Campanhas por Ano</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="anosChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top 10 CNPJs -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-trophy"></i> Top 10 Mandatários</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="topCnpjChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
