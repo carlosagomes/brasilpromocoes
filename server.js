@@ -57,6 +57,7 @@ const CACHE_MAX_ENTRIES = 4;
 // Relatórios já calculados são pequenos e podem ficar mais tempo
 const relatoriosCache = new Map();
 const RELATORIOS_CACHE_DURATION = 30 * 60 * 1000;
+const RELATORIOS_CACHE_MAX_ENTRIES = 300;
 
 // Ano atual no fuso de Brasília, para virar o ano sem depender do servidor
 function anoAtual() {
@@ -207,6 +208,7 @@ function resumo(promocao) {
     quantidadePremios: promocao.quantidadePremios,
     valorTotal: promocao.valorTotal,
     abrangencia: promocao.abrangencia,
+    segmento: segmentoDe(promocao),
     mandatario: {
       cnpj: mandatario.cnpj,
       nomeFantasia: mandatario.nomeFantasia,
@@ -255,6 +257,7 @@ app.get('/api/promocoes', async (req, res) => {
     situacao,
     vigentes
   } = req.query;
+  const segmento = validarSegmento(req.query.segmento);
 
   const ano = validarAno(anoPromocao);
   if (!ano) {
@@ -299,6 +302,10 @@ app.get('/api/promocoes', async (req, res) => {
     if (numeroCertificado) {
       const certificado = apenasDigitos(numeroCertificado);
       promocoes = promocoes.filter(p => apenasDigitos(p.numeroCA).includes(certificado));
+    }
+
+    if (segmento) {
+      promocoes = promocoes.filter(p => segmentoDe(p) === segmento);
     }
 
     if (dataInicio || dataFim || situacao) {
@@ -360,10 +367,72 @@ app.get('/api/promocoes/detalhe', async (req, res) => {
         message: `A promoção ${numero} não foi encontrada em ${ano}.`
       });
     }
-    res.json(promocao);
+    res.json({ ...promocao, segmento: segmentoDe(promocao) });
   } catch (error) {
     responderErro(res, error);
   }
+});
+
+// ===== Segmentos =====
+
+// A API não informa o setor da empresa, então o segmento é deduzido pelo nome
+// do mandatário. As regras são testadas em ordem e a primeira que casar vence
+// (ex.: "Associação dos Lojistas do Shopping X" é shopping, não associação comercial).
+const SEGMENTOS = [
+  { segmento: 'Shoppings', regex: /shopping|\bmall\b|outlet|\bfundo\b|\bfpp\b|associacao dos loj|lojistas do|subcondominio|condominio (civil |do |de )?(.* )?(center|plaza|park|shop|boulevard|patio|centro)|centro comercial/ },
+  { segmento: 'CDLs e associações comerciais', regex: /\bcdl\b|dirigentes lojistas|associacao (comercial|empresarial|dos comerciantes|de lojistas)|\baci[a-z]{0,3}\b|sindilojas|sindicato do comercio|federacao do comercio|fecomercio|camara de comercio|camara de dirigentes|\bspc\b/ },
+  { segmento: 'Rádio, TV e mídia', regex: /\bradio\b|televisao|\btv\b|emissora|comunicacao|comunicacoes|jornal|editora|\bmidia\b|\bfm\b|globo|record|\bsbt\b/ },
+  { segmento: 'Bancos, cartões e capitalização', regex: /banco\b|\bbank\b|sicoob|sicredi|cresol|unicred|cooperativa de credito|credito|capitalizacao|seguros|seguradora|financeira|consorcio|\bvisa\b|mastercard|pagamento|cartao|cartoes|itau|bradesco|santander|caixa economica|nubank|investimento|previdencia|serasa|mercado financeiro/ },
+  { segmento: 'Postos e combustíveis', regex: /\bposto\b|\bpostos\b|combustive|petroleo|ipiranga|raizen|\bvibra\b|lubrificante/ },
+  { segmento: 'Farmácias', regex: /farmacia|drogaria|\bdroga\b|\bfarma\b|pague menos|panvel|drogasil|raia|venancio/ },
+  { segmento: 'Supermercados e atacarejos', regex: /supermercado|super mercado|hipermercado|atacarejo|atacadista|atacadao|mercantil|mercearia|emporio|acougue|padaria|panificadora|hortifruti|\bmercado\b(?! (livre|pago|financeiro))|assai|carrefour|sendas|savegnago|\bsuper(?!intend)/ },
+  { segmento: 'Beleza e cosméticos', regex: /cosmetic|perfumaria|boticario|natura\b|eudora|\bavon\b|beleza|wepink|savi\b|wella|loreal|l oreal|\bcoty\b/ },
+  { segmento: 'Automotivo', regex: /veiculos|automoveis|automotiv|\bmotos\b|honda|yamaha|toyota|volkswagen|\bfiat\b|chevrolet|general motors|scania|volvo|\bpneus?\b|renault|hyundai|nissan|\bbyd\b|autopecas|auto pecas|caminhoes|diesel/ },
+  { segmento: 'Construção, casa e eletro', regex: /construc|construtora|materiais|tintas|home center|leroy|telhanorte|moveis|eletromoveis|magazine|casas bahia|eletrodomestic|colchoes|decoracao|tramontina|realty|incorporadora|vidros/ },
+  { segmento: 'Moda e calçados', regex: /calcados|grendene|\bmoda\b|confeccoes|vestuario|renner|riachuelo|havaianas|arezzo|textil|jeans|otica|joias|relojoaria|hennes|zara/ },
+  { segmento: 'Telecom e tecnologia', regex: /telecom|telefonica|\bvivo\b|\bclaro\b|\btim\b|internet|tecnologia|software|fibra|provedor|\bnet\b|eletronicos|informatica|digital|samsung|motorola|xiaomi|\blg\b/ },
+  { segmento: 'Energia e saneamento', regex: /eletricidade|energia|saneamento|agua e esgoto|distribuidora de gas|\bgas\b|copel|cemig|enel|equatorial|neoenergia|sabesp/ },
+  { segmento: 'Agronegócio', regex: /\bagro|agricola|agricultura|agropecuaria|rural|sementes|fertiliz|veterinari|saude animal|nutricao animal|racoes|maquinas agricolas/ },
+  { segmento: 'Indústria de alimentos e bebidas', regex: /alimentos|alimenticio|bebidas|cervejaria|cerveja|frigorifico|laticinio|unilever|nestle|ambev|coca|recofarma|pepsico|campari|seara|\bbrf\b|\bcafe\b|chocolate|biscoito|massas|moinho|sorvete|mondelez|bauducco|ferrero|heineken/ },
+  { segmento: 'Outras indústrias e marcas', regex: /industria|industrial|fabrica|procter|gamble|brands|bens de consumo|farmaceutic|laboratorio|isdin|kimberly|colgate|reckitt|johnson|braskem|importacao|importadora/ },
+  { segmento: 'Turismo e lazer', regex: /turismo|viagens|\bhotel|resort|cinema|parque aquatico|entretenimento/ },
+  { segmento: 'Educação', regex: /universidade|faculdade|\bescola\b|colegio|ensino|educacional|educacao|idiomas|\bccaa\b|wizard/ },
+  { segmento: 'Clubes e esporte', regex: /\bclube\b|regatas|futebol|esporte clube|sport club|\bfc\b|flamengo|corinthians|palmeiras|athletico|atletico|gremio|vasco|\bsaf\b|academia|skyfit/ },
+  { segmento: 'Igrejas e entidades', regex: /paroquia|mitra|diocese|arquidiocese|igreja|santuario|apae|santa casa|\bhospital\b|beneficente|assistencial|fundacao|\bong\b|lions|rotary|associacao (de pais|cultural)/ },
+  { segmento: 'Varejo e comércio em geral', regex: /comercio|comercial|\blojas?\b|varejo|varejista|atacado|distribuidora|distribuicao|franchising|franquia|quiosque|\brede\b/ },
+  { segmento: 'Agências de marketing e promoção', regex: /propaganda|publicidade|marketing|promocao|promocoes|\bpromo|agencia|engajamento|incentivo|eventos|fidelidade|fidelizacao|entertainment|intermediacao|lecupon|consultoria/ }
+];
+
+// Pistas no nome da promoção, usadas só quando o nome da empresa não diz nada
+const PISTAS_PROMOCAO = [
+  { segmento: 'Shoppings', regex: /shopping|\bmall\b|outlet/ },
+  { segmento: 'CDLs e associações comerciais', regex: /\bcdl\b|\baci[a-z]{0,3}\b|comercio local|compre no comercio/ },
+  { segmento: 'Igrejas e entidades', regex: /acao entre amigos|quermesse|paroquia|festa (do|da|de) (padroeir|sao|santo|santa|nossa senhora)/ },
+  { segmento: 'Supermercados e atacarejos', regex: /supermercado|atacarejo/ },
+  { segmento: 'Postos e combustíveis', regex: /\bposto\b|\bpostos\b/ },
+  { segmento: 'Farmácias', regex: /farmacia|drogaria/ }
+];
+
+const SEGMENTO_OUTROS = 'Outros';
+const NOMES_SEGMENTOS = [...SEGMENTOS.map(s => s.segmento), SEGMENTO_OUTROS];
+
+function segmentoDe(promocao) {
+  const mandatario = promocao.mandatario || {};
+  const empresa = normalizarTexto(`${mandatario.nomeFantasia || ''} ${mandatario.razaoSocial || ''}`);
+  const encontrado = SEGMENTOS.find(({ regex }) => regex.test(empresa));
+  if (encontrado) return encontrado.segmento;
+
+  const nome = normalizarTexto(promocao.nome);
+  const pista = PISTAS_PROMOCAO.find(({ regex }) => regex.test(nome));
+  return pista ? pista.segmento : SEGMENTO_OUTROS;
+}
+
+function validarSegmento(valor) {
+  return NOMES_SEGMENTOS.includes(valor) ? valor : '';
+}
+
+app.get('/api/segmentos', (req, res) => {
+  res.json({ segmentos: NOMES_SEGMENTOS });
 });
 
 // ===== Relatórios =====
@@ -551,21 +620,49 @@ app.get('/api/relatorios', async (req, res) => {
   }
 
   const uf = UFS.includes(req.query.uf) ? req.query.uf : '';
+  const segmento = validarSegmento(req.query.segmento);
   const resumo = req.query.resumo === '1';
-  const chave = `${ano}|${uf}`;
+  const chave = `${ano}|${uf}|${segmento}`;
 
   try {
     let entrada = relatoriosCache.get(chave);
     if (!entrada || Date.now() - entrada.timestamp > RELATORIOS_CACHE_DURATION) {
       const { promocoes, fonte } = await buscarAno(ano, { uf });
-      entrada = { relatorio: { ...calcularRelatorio(promocoes, ano), uf, fonte }, timestamp: Date.now() };
+
+      // A divisão por segmento usa todas as promoções do recorte, para o
+      // gráfico continuar mostrando os demais segmentos quando um é escolhido
+      const porSegmento = new Map(NOMES_SEGMENTOS.map(nome => [nome, { segmento: nome, total: 0, valor: 0 }]));
+      const doSegmento = [];
+      promocoes.forEach(promocao => {
+        const nome = segmentoDe(promocao);
+        const item = porSegmento.get(nome);
+        item.total++;
+        item.valor += Number(promocao.valorTotal) || 0;
+        if (!segmento || nome === segmento) doSegmento.push(promocao);
+      });
+
+      const relatorio = {
+        ...calcularRelatorio(doSegmento, ano),
+        uf,
+        segmento,
+        fonte,
+        totalRecorte: promocoes.length,
+        porSegmento: [...porSegmento.values()]
+          .filter(s => s.total > 0)
+          .sort((a, b) => (a.segmento === SEGMENTO_OUTROS) - (b.segmento === SEGMENTO_OUTROS) || b.total - a.total)
+      };
+      entrada = { relatorio, timestamp: Date.now() };
+
+      if (relatoriosCache.size >= RELATORIOS_CACHE_MAX_ENTRIES) {
+        relatoriosCache.delete(relatoriosCache.keys().next().value);
+      }
       relatoriosCache.set(chave, entrada);
     }
 
     const { relatorio } = entrada;
     if (resumo) {
       // Versão curta usada no histórico anual
-      return res.json({ ano, uf, total: relatorio.total, valorTotal: relatorio.valorTotal, fonte: relatorio.fonte });
+      return res.json({ ano, uf, segmento, total: relatorio.total, valorTotal: relatorio.valorTotal, fonte: relatorio.fonte });
     }
     res.json({ ...relatorio, timestamp: new Date(entrada.timestamp).toISOString() });
   } catch (error) {

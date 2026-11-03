@@ -13,6 +13,7 @@ const NOMES_UF = {
 const estado = {
     ano: getAnoAtual(),
     uf: '',
+    segmento: '',
     relatorio: null,
     metricaMes: 'total',
     controller: null,
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     estado.ano = anoDaURL(params);
     estado.uf = NOMES_UF[params.get('uf')] ? params.get('uf') : '';
+    estado.segmento = params.get('segmento') || '';
 
     seletorAno = criarSeletorAno($('yearChips'), $('anoOutro'), (ano) => {
         estado.ano = ano;
@@ -41,6 +43,22 @@ document.addEventListener('DOMContentLoaded', () => {
         estado.uf = ufSelect.value;
         carregar();
     });
+
+    $('segmento').addEventListener('change', () => escolherSegmento($('segmento').value));
+    $('limparSegmento').addEventListener('click', () => escolherSegmento(''));
+    $('chartSegmentos').addEventListener('click', (event) => {
+        const item = event.target.closest('[data-segmento]');
+        if (!item) return;
+        // Clicar no segmento já escolhido volta para todos
+        escolherSegmento(item.dataset.segmento === estado.segmento ? '' : item.dataset.segmento);
+    });
+    $('chartSegmentos').addEventListener('keydown', (event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-segmento]')) {
+            event.preventDefault();
+            event.target.click();
+        }
+    });
+    carregarSegmentos();
 
     $('mesMetric').addEventListener('click', (event) => {
         const botao = event.target.closest('.seg-btn');
@@ -59,6 +77,24 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== Carregamento =====
+
+async function carregarSegmentos() {
+    await preencherSegmentos($('segmento'));
+    $('segmento').value = estado.segmento;
+}
+
+function escolherSegmento(segmento) {
+    estado.segmento = segmento;
+    $('segmento').value = segmento;
+    carregar();
+}
+
+function aplicarFiltros(url) {
+    if (estado.uf) url.searchParams.set('uf', estado.uf);
+    if (estado.segmento) url.searchParams.set('segmento', estado.segmento);
+    return url;
+}
+
 async function carregar() {
     atualizarURL();
     if (estado.controller) estado.controller.abort();
@@ -71,7 +107,7 @@ async function carregar() {
     try {
         const url = new URL(RELATORIOS_URL, window.location.origin);
         url.searchParams.set('ano', estado.ano);
-        if (estado.uf) url.searchParams.set('uf', estado.uf);
+        aplicarFiltros(url);
 
         const response = await fetch(url, { signal: estado.controller.signal });
         const data = await response.json().catch(() => ({}));
@@ -96,6 +132,7 @@ function atualizarURL() {
     const params = new URLSearchParams();
     params.set('ano', estado.ano);
     if (estado.uf) params.set('uf', estado.uf);
+    if (estado.segmento) params.set('segmento', estado.segmento);
     history.replaceState(null, '', `${window.location.pathname}?${params}`);
 }
 
@@ -118,7 +155,7 @@ async function carregarHistorico() {
                 const url = new URL(RELATORIOS_URL, window.location.origin);
                 url.searchParams.set('ano', ano);
                 url.searchParams.set('resumo', '1');
-                if (estado.uf) url.searchParams.set('uf', estado.uf);
+                aplicarFiltros(url);
                 const response = await fetch(url);
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message);
@@ -140,8 +177,11 @@ function renderRelatorio() {
     $('sourceNotice').classList.toggle('hidden', r.fonte !== 'exportacao');
 
     const onde = r.uf ? ` válidas em ${NOMES_UF[r.uf]}` : '';
+    const notaTotal = r.segmento
+        ? `${percentual(r.total, r.totalRecorte)} das ${formatNumber(r.totalRecorte)} iniciadas em ${r.ano}${onde}`
+        : `iniciadas em ${r.ano}${onde}`;
     $('figures').innerHTML = [
-        figura('Promoções', formatNumber(r.total), `iniciadas em ${r.ano}${onde}`),
+        figura(r.segmento ? r.segmento : 'Promoções', formatNumber(r.total), notaTotal),
         figura('Valor em prêmios', formatCompactCurrency(r.valorTotal), 'soma de todas as promoções'),
         figura('Valor mediano', formatCompactCurrency(r.mediana), 'metade das promoções fica abaixo'),
         figura('Prêmios a distribuir', formatCompactNumber(r.quantidadePremios), 'unidades, incluindo brindes'),
@@ -149,6 +189,7 @@ function renderRelatorio() {
         figura('Em andamento hoje', formatNumber(r.emAndamento), 'com participação aberta')
     ].join('');
 
+    renderSegmentos();
     renderMes();
 
     renderBarras($('chartModalidade'), r.porModalidade.map(m => ({
@@ -219,6 +260,27 @@ function figura(rotulo, valor, nota) {
             </dd>
         </div>
     `;
+}
+
+function renderSegmentos() {
+    const r = estado.relatorio;
+    $('limparSegmento').classList.toggle('hidden', !r.segmento);
+    $('verNaBusca').classList.toggle('hidden', !r.segmento);
+    if (r.segmento) {
+        const params = new URLSearchParams({ ano: r.ano, segmento: r.segmento });
+        if (r.uf) params.set('uf', r.uf);
+        $('verNaBusca').href = `/?${params}`;
+    }
+
+    renderBarras($('chartSegmentos'), r.porSegmento.map(s => ({
+        label: s.segmento,
+        value: s.total,
+        display: formatNumber(s.total),
+        sub: formatCompactCurrency(s.valor),
+        segmento: s.segmento,
+        estado: !r.segmento ? '' : s.segmento === r.segmento ? 'ativo' : 'apagado',
+        tip: [s.segmento, `${formatNumber(s.total)} promoções (${percentual(s.total, r.totalRecorte)})`, `${formatCurrency(s.valor)} em prêmios`, s.segmento === r.segmento ? 'Clique para ver todos' : 'Clique para filtrar']
+    })), { colunas: true });
 }
 
 function renderMes() {
@@ -312,7 +374,7 @@ function renderMaiores() {
 function renderHistorico(anos, valores, atual) {
     const carregados = anos.filter(ano => valores.has(ano) && !valores.get(ano).erro);
     const sub = $('historicoSub');
-    const onde = estado.uf ? ` válidas em ${NOMES_UF[estado.uf]}` : '';
+    const onde = (estado.segmento ? ` · ${estado.segmento}` : '') + (estado.uf ? ` válidas em ${NOMES_UF[estado.uf]}` : '');
     sub.textContent = carregados.length < anos.length
         ? `Promoções iniciadas em cada ano${onde} · carregando ${carregados.length} de ${anos.length} anos…`
         : `Promoções iniciadas em cada ano${onde}. ${atual} ainda está em andamento; 2017 e 2018 têm poucos registros na base do SCPC.`;
@@ -394,7 +456,9 @@ function renderBarras(el, itens, { colunas = false } = {}) {
     }
     const max = Math.max(...itens.map(i => i.value)) || 1;
     el.innerHTML = `<ol class="hbars${colunas ? ' hbars-cols' : ''}">${itens.map(item => `
-        <li class="hbar" tabindex="0" data-tip="${escapeHTML(JSON.stringify(item.tip))}">
+        <li class="hbar${item.segmento ? ' hbar-clicavel' : ''}${item.estado ? ` is-${item.estado}` : ''}" tabindex="0"
+            data-tip="${escapeHTML(JSON.stringify(item.tip))}"
+            ${item.segmento ? `data-segmento="${escapeHTML(item.segmento)}" role="button" aria-pressed="${item.estado === 'ativo'}"` : ''}>
             <div class="hbar-head">
                 <span class="hbar-label">${item.dot ? `<span class="status ${item.dot}"></span>` : ''}${escapeHTML(item.label)}</span>
                 <span class="hbar-value">${escapeHTML(item.display)}${item.sub ? `<span class="hbar-sub">${escapeHTML(item.sub)}</span>` : ''}</span>

@@ -49,6 +49,12 @@
                         <option value="">Brasil inteiro</option>
                     </select>
                 </div>
+                <div class="field">
+                    <label for="segmento">Segmento</label>
+                    <select id="segmento">
+                        <option value="">Todos os segmentos</option>
+                    </select>
+                </div>
             </div>
         </section>
 
@@ -69,6 +75,20 @@
             </div>
 
             <dl class="figures" id="figures"></dl>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Segmentos</h2>
+                        <p class="panel-sub">Quem está fazendo promoções. Clique em um segmento para ver o relatório só dele. O segmento é deduzido pelo nome da empresa, então algumas ficam em "Outros".</p>
+                    </div>
+                    <div class="panel-actions">
+                        <a class="link-btn hidden" id="verNaBusca" href="/">Ver estas promoções na busca</a>
+                        <button type="button" class="link-btn hidden" id="limparSegmento">Ver todos os segmentos</button>
+                    </div>
+                </div>
+                <div id="chartSegmentos"></div>
+            </section>
 
             <section class="panel">
                 <div class="panel-head">

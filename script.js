@@ -48,8 +48,10 @@ function setAno(ano) {
 }
 
 // ===== Inicialização =====
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     setupYears();
+    // Os segmentos precisam estar no <select> antes de restaurar a busca da URL
+    await preencherSegmentos($('segmento'));
     restoreFromURL();
 
     searchForm.addEventListener('submit', handleSearch);
@@ -96,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ===== URL (permite compartilhar e voltar para uma busca) =====
-const URL_FIELDS = ['nomePromocao', 'uf', 'modalidade', 'nomeMandatario', 'cnpjMandatario', 'numeroCertificado'];
+const URL_FIELDS = ['nomePromocao', 'uf', 'modalidade', 'segmento', 'nomeMandatario', 'cnpjMandatario', 'numeroCertificado'];
 
 function restoreFromURL() {
     const params = new URLSearchParams(window.location.search);
@@ -383,6 +385,7 @@ function fillModalContent(promocao, estadoDetalhes) {
         <div class="drawer-meta">
             <span class="status ${situacao.cor}">${escapeHTML(situacao.label)}</span>
             <span>${escapeHTML(formatModalidade(promocao.modalidade))}</span>
+            ${promocao.segmento ? `<span>Segmento: ${escapeHTML(promocao.segmento)}</span>` : ''}
             ${isEmAndamento(promocao) ? '<span>Em andamento</span>' : ''}
         </div>
 

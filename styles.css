@@ -1012,6 +1012,12 @@ select { cursor: pointer; }
     max-width: 640px;
 }
 
+.panel-actions {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
 .segmented-sm .seg-btn { height: 30px; font-size: 0.8rem; padding: 0 10px; white-space: nowrap; }
 
 /* Colunas */
@@ -1183,6 +1189,16 @@ select { cursor: pointer; }
 .hbar-fill-2 { background: var(--series-2); }
 
 .hbar:hover .hbar-label { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+.hbar-clicavel { cursor: pointer; }
+.hbar.is-apagado .hbar-fill { background: var(--line-strong); }
+.hbar.is-apagado .hbar-head { color: var(--ink-2); }
+.hbar.is-ativo .hbar-label { font-weight: 700; }
+.hbar.is-ativo .hbar-label::before {
+    content: '✓';
+    margin-right: 6px;
+    color: var(--accent);
+}
 
 .legend {
     display: flex;

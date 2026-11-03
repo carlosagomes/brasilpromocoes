@@ -66,6 +66,18 @@ function criarSeletorAno(botoesEl, selectEl, aoEscolher) {
     return { marcar, atual, anos };
 }
 
+// Preenche um <select> com os segmentos; a lista vem do servidor, que classifica as empresas
+async function preencherSegmentos(selectEl) {
+    try {
+        const response = await fetch('/api/segmentos');
+        const { segmentos } = await response.json();
+        selectEl.insertAdjacentHTML('beforeend',
+            segmentos.map(nome => `<option value="${escapeHTML(nome)}">${escapeHTML(nome)}</option>`).join(''));
+    } catch (error) {
+        console.error('Erro ao carregar segmentos:', error);
+    }
+}
+
 // Ano válido vindo da URL, ou o ano atual
 function anoDaURL(params) {
     const atual = getAnoAtual();
