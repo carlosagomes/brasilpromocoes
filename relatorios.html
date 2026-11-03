@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Relatórios das promoções comerciais autorizadas no Brasil, com dados do SCPC.">
+    <meta name="theme-color" content="#f7f6f2">
+    <title>Relatórios — Brasil Promoções</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="masthead">
+        <div class="wrap masthead-inner">
+            <div class="masthead-left">
+                <a class="wordmark" href="/">Brasil<span>Promoções</span></a>
+                <nav class="mainnav">
+                    <a href="/">Busca</a>
+                    <a href="/relatorios" aria-current="page">Relatórios</a>
+                </nav>
+            </div>
+            <nav class="masthead-links">
+                <a href="https://scpc.seae.fazenda.gov.br/scpc/promocao_consulta_publica.jsf" target="_blank" rel="noopener">Consulta oficial ↗</a>
+                <a href="https://api.scpc.estaleiro.serpro.gov.br/" target="_blank" rel="noopener">API do SCPC ↗</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="intro intro-report">
+            <div>
+                <h1>Relatórios</h1>
+                <p>Panorama das promoções comerciais autorizadas, calculado a partir da base atualizada do SCPC.</p>
+            </div>
+
+            <div class="report-controls">
+                <div class="field">
+                    <span class="label" id="anoLabel">Ano de início</span>
+                    <div class="year-control">
+                        <div class="segmented" id="yearChips" role="radiogroup" aria-labelledby="anoLabel"></div>
+                        <select id="anoOutro" class="year-select" aria-label="Outro ano"></select>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="uf">Estado</label>
+                    <select id="uf">
+                        <option value="">Brasil inteiro</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <section id="loadingState" aria-live="polite">
+            <div class="progress"><span></span></div>
+            <p class="muted small">Calculando o relatório…</p>
+        </section>
+
+        <section id="errorState" class="message hidden">
+            <h2>Não foi possível gerar o relatório</h2>
+            <p id="errorMessage"></p>
+            <button id="retryButton" class="btn btn-secondary">Tentar novamente</button>
+        </section>
+
+        <div id="report" class="report hidden">
+            <div id="sourceNotice" class="notice hidden">
+                A consulta atualizada do SCPC não respondeu. Estes números vêm da exportação padrão, que pode estar desatualizada.
+            </div>
+
+            <dl class="figures" id="figures"></dl>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Promoções por mês de início</h2>
+                        <p class="panel-sub" id="mesSub"></p>
+                    </div>
+                    <div class="segmented segmented-sm" id="mesMetric" role="radiogroup" aria-label="Medida">
+                        <button type="button" class="seg-btn active" data-metric="total" role="radio" aria-checked="true">Quantidade</button>
+                        <button type="button" class="seg-btn" data-metric="valor" role="radio" aria-checked="false">Valor em prêmios</button>
+                    </div>
+                </div>
+                <div id="chartMes"></div>
+                <details class="table-toggle">
+                    <summary>Ver em tabela</summary>
+                    <div id="tableMes"></div>
+                </details>
+            </section>
+
+            <div class="panel-grid">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Modalidade</h2>
+                            <p class="panel-sub">Quantidade de promoções e valor em prêmios</p>
+                        </div>
+                    </div>
+                    <div id="chartModalidade"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Situação</h2>
+                            <p class="panel-sub">Etapa em que cada promoção está hoje</p>
+                        </div>
+                    </div>
+                    <div id="chartSituacao"></div>
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>O que está sendo sorteado</h2>
+                        <p class="panel-sub">Promoções que oferecem cada tipo de prêmio e o valor somado desses prêmios. Uma promoção com carro e celular conta nos dois. Tipos identificados pelas palavras da descrição de cada prêmio.</p>
+                    </div>
+                </div>
+                <div id="chartTipos"></div>
+            </section>
+
+            <div class="panel-grid">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Faixa de valor</h2>
+                            <p class="panel-sub">Valor total em prêmios de cada promoção</p>
+                        </div>
+                    </div>
+                    <div id="chartFaixas"></div>
+                </section>
+
+                <section class="panel" id="panelUF">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Estados</h2>
+                            <p class="panel-sub">Promoções válidas em cada estado</p>
+                        </div>
+                    </div>
+                    <div class="legend" id="legendUF"></div>
+                    <div id="chartUF"></div>
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Maiores promoções</h2>
+                        <p class="panel-sub">Pelo valor total em prêmios</p>
+                    </div>
+                </div>
+                <div class="table-wrap" id="tableMaiores"></div>
+            </section>
+
+            <div class="panel-grid">
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Empresas com mais promoções</h2>
+                        </div>
+                    </div>
+                    <div id="chartEmpresas"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Empresas com mais valor em prêmios</h2>
+                        </div>
+                    </div>
+                    <div id="chartEmpresasValor"></div>
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Evolução anual</h2>
+                        <p class="panel-sub" id="historicoSub">Promoções iniciadas em cada ano</p>
+                    </div>
+                </div>
+                <div id="chartHistorico"></div>
+                <details class="table-toggle">
+                    <summary>Ver em tabela</summary>
+                    <div id="tableHistorico"></div>
+                </details>
+            </section>
+
+            <p class="muted small report-foot" id="reportFoot"></p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="wrap">
+            Dados públicos do Sistema de Controle de Promoções Comerciais (SCPC). Este site não é um canal oficial do governo.
+        </div>
+    </footer>
+
+    <div id="chartTooltip" class="chart-tooltip" role="tooltip" hidden></div>
+
+    <script src="comum.js"></script>
+    <script src="relatorios.js"></script>
+</body>
+</html>

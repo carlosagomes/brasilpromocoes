@@ -1,491 +1,551 @@
 // Configuração da API
 const API_BASE_URL = '/api/promocoes';
+const PAGE_SIZE = 30;
+const CONSULTA_OFICIAL_URL = 'https://scpc.seae.fazenda.gov.br/scpc/promocao_consulta_publica.jsf';
 
-// Elementos do DOM
-const searchForm = document.getElementById('searchForm');
-const loadingState = document.getElementById('loadingState');
-const resultsSection = document.getElementById('resultsSection');
-const errorState = document.getElementById('errorState');
-const emptyState = document.getElementById('emptyState');
-const promocoesContainer = document.getElementById('promocoesContainer');
-const resultsTitle = document.getElementById('resultsTitle');
-const resultsCount = document.getElementById('resultsCount');
-const errorMessage = document.getElementById('errorMessage');
-const retryButton = document.getElementById('retryButton');
-const clearFiltersButton = document.getElementById('clearFilters');
+// Elementos do DOM (o helper $ está em comum.js)
+const searchForm = $('searchForm');
+const searchButton = $('searchButton');
+const anoInput = $('anoPromocao');
+const anoSelect = $('anoOutro');
+const yearChips = $('yearChips');
+const loadingState = $('loadingState');
+const resultsSection = $('resultsSection');
+const errorState = $('errorState');
+const emptyState = $('emptyState');
+const promocoesContainer = $('promocoesContainer');
+const resultsCount = $('resultsCount');
+const errorMessage = $('errorMessage');
+const statsEl = $('stats');
+const statusChipsEl = $('statusChips');
+const refineInput = $('refineInput');
+const sortSelect = $('sortSelect');
+const loadMoreButton = $('loadMore');
+const sourceNotice = $('sourceNotice');
+const modal = $('promocaoModal');
 
 // Estado da aplicação
 let currentPromocoes = [];
+let currentMetadata = null;
+let visiblePromocoes = [];
+let shownCount = 0;
+let statusFilter = '';
+let searchController = null;
 
-// Inicialização
+// ===== Ano automático =====
+let seletorAno;
+
+function setupYears() {
+    seletorAno = criarSeletorAno(yearChips, anoSelect, (ano) => {
+        anoInput.value = String(ano);
+        searchForm.requestSubmit();
+    });
+}
+
+function setAno(ano) {
+    anoInput.value = String(ano);
+    seletorAno.marcar(ano);
+}
+
+// ===== Inicialização =====
 document.addEventListener('DOMContentLoaded', function() {
-    // Configurar ano atual como padrão
-    const currentYear = new Date().getFullYear();
-    const anoSelect = document.getElementById('anoPromocao');
-    anoSelect.value = currentYear;
-    
-    // Event listeners
+    setupYears();
+    restoreFromURL();
+
     searchForm.addEventListener('submit', handleSearch);
-    clearFiltersButton.addEventListener('click', clearFilters);
-    retryButton.addEventListener('click', retrySearch);
-    
+    $('clearFilters').addEventListener('click', clearFilters);
+    $('retryButton').addEventListener('click', () => searchForm.requestSubmit());
+    $('vigentes').addEventListener('change', () => searchForm.requestSubmit());
+    loadMoreButton.addEventListener('click', renderNextPage);
+
+    refineInput.addEventListener('input', debounce(applyLocalFilters, 150));
+    sortSelect.addEventListener('change', applyLocalFilters);
+    statusChipsEl.addEventListener('click', (event) => {
+        const tab = event.target.closest('.tab');
+        if (!tab) return;
+        statusFilter = tab.dataset.status;
+        applyLocalFilters();
+    });
+
+    promocoesContainer.addEventListener('click', (event) => {
+        const row = event.target.closest('.row');
+        if (row) showPromocaoDetails(currentPromocoes[Number(row.dataset.index)]);
+    });
+
+    $('toggleAdvanced').addEventListener('click', () => {
+        setAdvancedOpen($('advancedFilters').classList.contains('hidden'));
+    });
+
     // Máscara para CNPJ
-    const cnpjInput = document.getElementById('cnpjMandatario');
-    cnpjInput.addEventListener('input', formatCNPJ);
-    cnpjInput.addEventListener('paste', handleCNPJPaste);
+    const cnpjInput = $('cnpjMandatario');
+    cnpjInput.addEventListener('input', () => formatCNPJ(cnpjInput));
+
+    $('modalClose').addEventListener('click', closeModal);
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) closeModal();
+    });
+    modal.addEventListener('close', () => { document.body.style.overflow = ''; });
+
+    window.addEventListener('popstate', () => {
+        restoreFromURL();
+        searchForm.requestSubmit();
+    });
+
+    // Busca automática ao abrir o site
+    searchForm.requestSubmit();
 });
 
-// Função principal de busca
+// ===== URL (permite compartilhar e voltar para uma busca) =====
+const URL_FIELDS = ['nomePromocao', 'uf', 'modalidade', 'nomeMandatario', 'cnpjMandatario', 'numeroCertificado'];
+
+function restoreFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    setAno(anoDaURL(params));
+
+    URL_FIELDS.forEach(field => { $(field).value = params.get(field) || ''; });
+    if ($('cnpjMandatario').value) formatCNPJ($('cnpjMandatario'));
+    $('vigentes').checked = params.get('vigentes') === '1';
+
+    if (URL_FIELDS.slice(1).some(field => params.get(field))) {
+        setAdvancedOpen(true);
+    }
+    updateFilterCount();
+}
+
+function setAdvancedOpen(aberto) {
+    $('advancedFilters').classList.toggle('hidden', !aberto);
+    $('toggleAdvanced').setAttribute('aria-expanded', aberto);
+}
+
+function updateURL(searchParams) {
+    const params = new URLSearchParams();
+    params.set('ano', searchParams.anoPromocao);
+    URL_FIELDS.forEach(field => {
+        if (searchParams[field]) params.set(field, field === 'cnpjMandatario' ? $(field).value : searchParams[field]);
+    });
+    if (searchParams.vigentes) params.set('vigentes', '1');
+
+    const url = `${window.location.pathname}?${params}`;
+    if (url !== window.location.pathname + window.location.search) {
+        history.pushState(null, '', url);
+    }
+}
+
+function updateFilterCount() {
+    const count = URL_FIELDS.slice(1).filter(field => $(field).value.trim()).length;
+    const badge = $('filterCount');
+    badge.textContent = count;
+    badge.classList.toggle('hidden', count === 0);
+}
+
+// ===== Busca =====
 async function handleSearch(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(searchForm);
     const searchParams = {};
-    
-    // Coletar parâmetros do formulário
+
     for (const [key, value] of formData.entries()) {
-        if (value.trim() !== '') {
-            // Limpar CNPJ removendo formatação antes de enviar
-            if (key === 'cnpjMandatario') {
-                const cleanedCNPJ = cleanCNPJ(value);
-                searchParams[key] = cleanedCNPJ;
-                console.log(`CNPJ original: ${value} -> CNPJ limpo: ${cleanedCNPJ}`);
-            } else {
-                searchParams[key] = value.trim();
-            }
-        }
+        const trimmed = String(value).trim();
+        if (trimmed === '') continue;
+        searchParams[key] = key === 'cnpjMandatario' ? cleanCNPJ(trimmed) : trimmed;
     }
-    
-    console.log('Parâmetros de busca:', searchParams);
-    
-    // Validar ano obrigatório
+
     if (!searchParams.anoPromocao) {
         showError('Por favor, selecione o ano da promoção.');
         return;
     }
-    
+
+    for (const [field, label] of [['nomePromocao', 'O nome da promoção'], ['nomeMandatario', 'O nome da empresa']]) {
+        if (searchParams[field] && searchParams[field].length < 3) {
+            showError(`${label} precisa ter pelo menos 3 letras.`);
+            return;
+        }
+    }
+
+    updateURL(searchParams);
+    updateFilterCount();
+
+    // Cancela uma busca anterior que ainda esteja em andamento
+    if (searchController) searchController.abort();
+    searchController = new AbortController();
+
     try {
         showLoading();
-        console.log('Iniciando busca...');
-        const promocoes = await fetchPromocoes(searchParams);
-        console.log('Promoções encontradas:', promocoes.length);
-        currentPromocoes = promocoes;
-        displayResults(promocoes);
+        const data = await fetchPromocoes(searchParams, searchController.signal);
+        currentPromocoes = data.promocoes;
+        currentMetadata = data.metadata;
+        statusFilter = '';
+        refineInput.value = '';
+        displayResults();
     } catch (error) {
+        if (error.name === 'AbortError') return;
         console.error('Erro na busca:', error);
-        showError(`Erro ao buscar promoções: ${error.message}`);
+        showError(error.message);
+    } finally {
+        searchButton.disabled = false;
     }
 }
 
-// Função para buscar promoções na API
-async function fetchPromocoes(params) {
+async function fetchPromocoes(params, signal) {
     const url = new URL(API_BASE_URL, window.location.origin);
-    
-    // Adicionar parâmetros à URL
-    Object.keys(params).forEach(key => {
-        url.searchParams.append(key, params[key]);
-    });
-    
-    console.log('Buscando em:', url.toString());
-    
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Dados recebidos:', data);
-        
-        return processApiResponse(data);
-        
-    } catch (error) {
-        console.error('Erro na requisição:', error);
-        throw error;
+    Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+
+    const response = await fetch(url, { headers: { 'Accept': 'application/json' }, signal });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(data.message || `Erro ${response.status} ao consultar promoções.`);
     }
+
+    return {
+        promocoes: Array.isArray(data.promocoes) ? data.promocoes : [],
+        metadata: data.metadata || {}
+    };
 }
 
-// Função para processar resposta da API
-function processApiResponse(data) {
-    if (data.promocoes && Array.isArray(data.promocoes)) {
-        return data.promocoes;
-    } else if (Array.isArray(data)) {
-        return data;
-    } else if (data.data && Array.isArray(data.data)) {
-        return data.data;
-    } else {
-        // Se não for um array, tentar encontrar propriedades que contenham arrays
-        const possibleArrays = Object.values(data).filter(value => Array.isArray(value));
-        if (possibleArrays.length > 0) {
-            return possibleArrays[0];
-        }
-        return [];
-    }
-}
-
-// Dados de exemplo para demonstração
-function getSampleData() {
-    return [
-        {
-            numeroPromocao: "2024/00001",
-            nome: "Promoção de Exemplo - Smartphone",
-            modalidade: "Sorteio",
-            numeroCA: "CA202400001",
-            codigoAutenticidade: "ABC123",
-            situacao: "AUTORIZADA",
-            dataInicio: "2024-01-01",
-            dataFim: "2024-12-31",
-            quantidadePremios: 10,
-            valorTotal: 50000.00,
-            quantidadeSeries: 1,
-            abrangencia: "SP, RJ, MG",
-            mandatario: {
-                cnpj: "12345678000195",
-                nomeFantasia: "Empresa Exemplo Ltda",
-                razaoSocial: "Empresa Exemplo de Tecnologia Ltda",
-                endereco: "Rua das Flores",
-                numero: "123",
-                complemento: "Sala 45",
-                bairro: "Centro",
-                cidade: "São Paulo",
-                uf: "SP",
-                cep: "01234567"
-            },
-            apuracoes: [
-                {
-                    idApuracao: 1,
-                    localApuracao: "Sede da Empresa",
-                    inicioApuracao: "2024-12-31T14:00:00",
-                    fimApuracao: "2024-12-31T16:00:00",
-                    inicioParticipacao: "2024-01-01",
-                    fimParticipacao: "2024-12-30",
-                    premios: [
-                        {
-                            descricao: "Smartphone Galaxy S24",
-                            quantidade: 10,
-                            valor_unitario: 5000.00,
-                            valor_total: 50000.00,
-                            ordem: "1",
-                            data_entrega: "2025-01-15"
-                        }
-                    ]
-                }
-            ]
-        }
-    ];
-}
-
-// Função para exibir resultados
-function displayResults(promocoes) {
+// ===== Resultados =====
+function displayResults() {
     hideAllStates();
-    
-    if (promocoes.length === 0) {
-        showEmptyState();
+
+    if (currentPromocoes.length === 0) {
+        emptyState.classList.remove('hidden');
         return;
     }
-    
+
     resultsSection.classList.remove('hidden');
-    resultsCount.textContent = promocoes.length;
-    
-    // Limpar container anterior
+    sourceNotice.classList.toggle('hidden', currentMetadata.fonte !== 'exportacao');
+    renderStats();
+    applyLocalFilters();
+}
+
+function renderStats() {
+    const agora = Date.now();
+    const total = currentPromocoes.length;
+    const emAndamento = currentPromocoes.filter(p => isEmAndamento(p, agora)).length;
+    const valorTotal = currentPromocoes.reduce((soma, p) => soma + (Number(p.valorTotal) || 0), 0);
+    const empresas = new Set(currentPromocoes.map(p => p.mandatario?.cnpj).filter(Boolean)).size;
+
+    const ano = currentMetadata.ano;
+    statsEl.innerHTML = `
+        <p class="summary-main">
+            <strong>${formatNumber(total)}</strong> ${total === 1 ? 'promoção' : 'promoções'}
+            ${currentMetadata.vigentes ? `iniciadas ou vigentes em ${ano}` : `iniciadas em ${ano}`}
+        </p>
+        <span class="summary-item"><strong>${formatNumber(emAndamento)}</strong> em andamento hoje</span>
+        <span class="summary-item"><strong>${formatCompactCurrency(valorTotal)}</strong> em prêmios</span>
+        <span class="summary-item"><strong>${formatNumber(empresas)}</strong> empresas</span>
+    `;
+}
+
+function renderStatusChips() {
+    const counts = {};
+    currentPromocoes.forEach(p => { counts[p.situacao] = (counts[p.situacao] || 0) + 1; });
+
+    const ordenadas = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    statusChipsEl.innerHTML = [
+        `<button type="button" role="tab" class="tab ${statusFilter === '' ? 'active' : ''}" aria-selected="${statusFilter === ''}" data-status="">Todas <span class="count">${formatNumber(currentPromocoes.length)}</span></button>`,
+        ...ordenadas.map(status => `
+            <button type="button" role="tab" class="tab ${statusFilter === status ? 'active' : ''}" aria-selected="${statusFilter === status}" data-status="${escapeHTML(status)}">
+                ${escapeHTML(getSituacao(status).label)} <span class="count">${formatNumber(counts[status])}</span>
+            </button>
+        `)
+    ].join('');
+}
+
+// Filtro e ordenação no navegador, sem nova chamada à API
+function applyLocalFilters() {
+    renderStatusChips();
+
+    const termo = normalize(refineInput.value);
+    visiblePromocoes = currentPromocoes
+        .map((promocao, index) => ({ promocao, index }))
+        .filter(({ promocao }) => {
+            if (statusFilter && promocao.situacao !== statusFilter) return false;
+            if (!termo) return true;
+            const texto = [
+                promocao.nome, promocao.numeroPromocao, promocao.numeroCA, promocao.modalidade,
+                promocao.mandatario?.nomeFantasia, promocao.mandatario?.razaoSocial,
+                promocao.mandatario?.cidade, promocao.abrangencia
+            ].join(' ');
+            return normalize(texto).includes(termo);
+        });
+
+    const sorters = {
+        recentes: (a, b) => String(b.promocao.numeroPromocao).localeCompare(String(a.promocao.numeroPromocao)),
+        termina: (a, b) => terminaSort(a.promocao) - terminaSort(b.promocao),
+        valor: (a, b) => (Number(b.promocao.valorTotal) || 0) - (Number(a.promocao.valorTotal) || 0),
+        nome: (a, b) => String(a.promocao.nome || '').localeCompare(String(b.promocao.nome || ''), 'pt-BR')
+    };
+    visiblePromocoes.sort(sorters[sortSelect.value] || sorters.recentes);
+
     promocoesContainer.innerHTML = '';
-    
-    // Verificar se são dados de exemplo
-    const isSampleData = promocoes.some(p => p.numeroPromocao === "2024/00001");
-    if (isSampleData) {
-        const sampleNotice = document.createElement('div');
-        sampleNotice.className = 'sample-notice';
-        sampleNotice.innerHTML = `
-            <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 10px; padding: 15px; margin-bottom: 20px; text-align: center;">
-                <i class="fas fa-info-circle" style="color: #856404; margin-right: 8px;"></i>
-                <strong style="color: #856404;">Modo Demonstração:</strong>
-                <span style="color: #856404;">Exibindo dados de exemplo. A API pode estar temporariamente indisponível.</span>
-            </div>
-        `;
-        promocoesContainer.appendChild(sampleNotice);
-    }
-    
-    // Criar cards para cada promoção
-    promocoes.forEach(promocao => {
-        const card = createPromocaoCard(promocao);
-        promocoesContainer.appendChild(card);
-    });
+    shownCount = 0;
+    renderNextPage();
 }
 
-// Função para criar card de promoção
-function createPromocaoCard(promocao) {
-    const card = document.createElement('div');
-    card.className = 'promocao-card';
-    card.style.cursor = 'pointer';
-    
-    // Determinar status da promoção
-    const status = promocao.situacao || 'N/A';
-    const statusClass = getStatusClass(status);
-    
-    // Formatar datas
-    const dataInicio = formatDate(promocao.dataInicio);
-    const dataFim = formatDate(promocao.dataFim);
-    
-    // Formatar valores
-    const valorTotal = formatCurrency(promocao.valorTotal);
-    
-    // Informações básicas do mandatário
-    const mandatarioNome = promocao.mandatario?.nomeFantasia || promocao.mandatario?.razaoSocial || 'Nome não informado';
-    const mandatarioCnpj = promocao.mandatario?.cnpj ? formatCNPJDisplay(promocao.mandatario.cnpj) : 'N/A';
-    const mandatarioEndereco = formatEndereco(promocao.mandatario) || '';
-    
-    card.innerHTML = `
-        <div class="promocao-header">
-            <h3 class="promocao-nome">${promocao.nome || 'Nome não informado'}</h3>
-            <div class="promocao-modalidade">
-                <i class="fas fa-trophy"></i>
-                ${promocao.modalidade || 'N/A'}
-            </div>
-        </div>
-        
-        <div class="promocao-summary">
-            <div class="summary-row">
-                <div class="summary-item">
-                    <span class="summary-label">Status:</span>
-                    <span class="promocao-status ${statusClass}">${status}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Certificado:</span>
-                    <span class="summary-value">${promocao.numeroCA || 'N/A'}</span>
-                </div>
-            </div>
-            <div class="summary-row">
-                <div class="summary-item">
-                    <span class="summary-label">Data Início:</span>
-                    <span class="summary-value">${dataInicio}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Data Fim:</span>
-                    <span class="summary-value">${dataFim}</span>
-                </div>
-            </div>
-            <div class="summary-row">
-                <div class="summary-item">
-                    <span class="summary-label">Prêmios:</span>
-                    <span class="summary-value">${promocao.quantidadePremios || 0}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Valor Total:</span>
-                    <span class="summary-value">${valorTotal}</span>
-                </div>
-            </div>
-            <div class="summary-row">
-                <div class="summary-item">
-                    <span class="summary-label">Abrangência:</span>
-                    <span class="summary-value">${promocao.abrangencia || 'N/A'}</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="mandatario-summary">
-            <div class="mandatario-nome">${mandatarioNome}</div>
-            <div class="mandatario-cnpj">CNPJ: ${mandatarioCnpj}</div>
-            ${mandatarioEndereco ? `<div class="mandatario-endereco">${mandatarioEndereco}</div>` : ''}
-        </div>
-        
-        <div class="card-footer">
-            <div class="click-hint">
-                <i class="fas fa-mouse-pointer"></i>
-                Clique para ver detalhes completos
-            </div>
-        </div>
+// Promoções em andamento primeiro, ordenadas pela data de fim mais próxima
+function terminaSort(promocao) {
+    const fim = new Date(promocao.dataFim).getTime() || Infinity;
+    return fim >= Date.now() ? fim : Infinity;
+}
+
+function renderNextPage() {
+    const fragment = document.createDocumentFragment();
+    const next = visiblePromocoes.slice(shownCount, shownCount + PAGE_SIZE);
+    next.forEach(({ promocao, index }) => fragment.appendChild(createPromocaoRow(promocao, index)));
+    promocoesContainer.appendChild(fragment);
+    shownCount += next.length;
+
+    const total = visiblePromocoes.length;
+    resultsCount.textContent = total === 0
+        ? 'Nenhuma promoção corresponde ao filtro.'
+        : `Exibindo ${formatNumber(shownCount)} de ${formatNumber(total)} promoções`;
+
+    const restantes = total - shownCount;
+    loadMoreButton.classList.toggle('hidden', restantes <= 0);
+    loadMoreButton.textContent = `Carregar mais ${formatNumber(Math.min(PAGE_SIZE, restantes))}`;
+}
+
+function createPromocaoRow(promocao, index) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'row';
+    row.setAttribute('role', 'row');
+    row.dataset.index = index;
+
+    const situacao = getSituacao(promocao.situacao);
+    const mandatario = promocao.mandatario || {};
+    const empresa = mandatario.nomeFantasia || mandatario.razaoSocial || 'Empresa não informada';
+    const local = [toTitleCase(mandatario.cidade), mandatario.uf].filter(Boolean).join('/');
+
+    row.innerHTML = `
+        <span class="row-numero" role="cell">${escapeHTML(promocao.numeroPromocao || 'N/A')}</span>
+        <span class="row-main" role="cell">
+            <span class="row-title">${escapeHTML(promocao.nome || 'Nome não informado')}</span>
+            <span class="row-sub">${escapeHTML(empresa)}${local ? ` · ${escapeHTML(local)}` : ''}</span>
+        </span>
+        <span class="row-modalidade" role="cell">${escapeHTML(formatModalidade(promocao.modalidade))}</span>
+        <span class="row-periodo" role="cell">${formatPeriodo(promocao.dataInicio, promocao.dataFim)}</span>
+        <span class="row-valor" role="cell">${formatCurrency(promocao.valorTotal)}</span>
+        <span class="status-col" role="cell">
+            <span class="status ${situacao.cor}">${escapeHTML(situacao.label)}</span>
+            ${isEmAndamento(promocao) ? '<span class="live">em andamento</span>' : ''}
+        </span>
     `;
-    
-    // Adicionar evento de clique para mostrar detalhes
-    card.addEventListener('click', () => {
-        showPromocaoDetails(promocao);
-    });
-    
-    return card;
+
+    return row;
 }
 
-// Função para criar informações do mandatário
-function createMandatarioInfo(mandatario) {
-    if (!mandatario) return '';
-    
-    const endereco = formatEndereco(mandatario);
-    
+// ===== Modal de detalhes =====
+async function showPromocaoDetails(resumo) {
+    if (!resumo) return;
+
+    $('modalKicker').textContent = `Promoção nº ${resumo.numeroPromocao || 'N/A'} · Certificado ${resumo.numeroCA || 'N/A'}`;
+    $('modalTitle').textContent = resumo.nome || 'Detalhes da promoção';
+    fillModalContent(resumo, null);
+
+    document.body.style.overflow = 'hidden';
+    modal.showModal();
+
+    // Apurações e prêmios vêm sob demanda para manter a listagem leve
+    try {
+        const ano = anoDe(resumo.dataInicio) || currentMetadata.ano;
+        const url = new URL(`${API_BASE_URL}/detalhe`, window.location.origin);
+        url.searchParams.set('ano', ano);
+        url.searchParams.set('numero', resumo.numeroPromocao);
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        if (modal.open && $('modalTitle').textContent === (resumo.nome || 'Detalhes da promoção')) {
+            fillModalContent(data, 'ok');
+        }
+    } catch (error) {
+        console.error('Erro ao carregar detalhes:', error);
+        if (modal.open) fillModalContent(resumo, 'erro');
+    }
+}
+
+function fillModalContent(promocao, estadoDetalhes) {
+    const situacao = getSituacao(promocao.situacao);
+    const mandatario = promocao.mandatario || {};
+
+    let detalhesHTML = '';
+    if (estadoDetalhes === null) {
+        detalhesHTML = `<p class="loading-inline">Carregando prêmios e apurações…</p>`;
+    } else if (estadoDetalhes === 'erro') {
+        detalhesHTML = `<div class="notice">Não foi possível carregar os prêmios e as apurações agora.</div>`;
+    } else {
+        detalhesHTML = createModalPremiosInfo(promocao.apuracoes) + createModalApuracoesInfo(promocao.apuracoes);
+    }
+
+    $('modalBody').innerHTML = `
+        <div class="drawer-meta">
+            <span class="status ${situacao.cor}">${escapeHTML(situacao.label)}</span>
+            <span>${escapeHTML(formatModalidade(promocao.modalidade))}</span>
+            ${isEmAndamento(promocao) ? '<span>Em andamento</span>' : ''}
+        </div>
+
+        <div class="drawer-actions">
+            <button type="button" class="btn btn-secondary" data-copy="${escapeHTML(promocao.numeroCA || '')}">Copiar certificado</button>
+            <a class="btn btn-secondary" href="${CONSULTA_OFICIAL_URL}" target="_blank" rel="noopener">Regulamento na consulta oficial ↗</a>
+        </div>
+
+        <section class="section">
+            <h3>Resumo</h3>
+            <dl class="dl">
+                ${detailItem('Período', `${formatDateTime(promocao.dataInicio)} até ${formatDateTime(promocao.dataFim)}`)}
+                ${detailItem('Valor em prêmios', formatCurrency(promocao.valorTotal))}
+                ${detailItem('Quantidade de prêmios', formatNumber(Number(promocao.quantidadePremios) || 0))}
+                ${promocao.quantidadeSeries !== undefined ? detailItem('Séries', promocao.quantidadeSeries) : ''}
+                ${detailItem('Abrangência', formatAbrangencia(promocao.abrangencia))}
+                ${promocao.codigoAutenticidade ? detailItem('Código de autenticidade', promocao.codigoAutenticidade, 'mono') : ''}
+            </dl>
+        </section>
+
+        <section class="section">
+            <h3>Empresa responsável</h3>
+            <dl class="dl">
+                ${detailItem('Nome fantasia', mandatario.nomeFantasia)}
+                ${mandatario.razaoSocial ? detailItem('Razão social', mandatario.razaoSocial) : ''}
+                ${detailItem('CNPJ', formatCNPJDisplay(mandatario.cnpj), 'mono')}
+                ${detailItem('Endereço', formatEndereco(mandatario) || [mandatario.cidade, mandatario.uf].filter(Boolean).join(' - '))}
+            </dl>
+        </section>
+
+        ${detalhesHTML}
+    `;
+
+    const copyButton = $('modalBody').querySelector('[data-copy]');
+    copyButton.addEventListener('click', () => copyText(copyButton.dataset.copy, 'Certificado copiado'));
+}
+
+function detailItem(label, value, className = '') {
+    const texto = value === undefined || value === null || value === '' ? 'N/A' : value;
+    return `<dt>${escapeHTML(label)}</dt><dd class="${className}">${escapeHTML(String(texto))}</dd>`;
+}
+
+function createModalPremiosInfo(apuracoes) {
+    if (!Array.isArray(apuracoes)) return '';
+
+    const premios = [];
+    apuracoes.forEach((apuracao, apuracaoIndex) => {
+        (apuracao.premios || []).forEach(premio => premios.push({ ...premio, apuracao: apuracaoIndex + 1 }));
+    });
+    if (premios.length === 0) return '';
+
+    const mostrarApuracao = apuracoes.length > 1;
+    const total = premios.reduce((soma, p) => soma + (Number(p.valor_total) || 0), 0);
+    const quantidade = premios.reduce((soma, p) => soma + (Number(p.quantidade) || 0), 0);
+
     return `
-        <div class="mandatario-info">
-            <div class="mandatario-nome">${mandatario.nomeFantasia || mandatario.razaoSocial || 'Nome não informado'}</div>
-            <div class="mandatario-cnpj">CNPJ: ${formatCNPJDisplay(mandatario.cnpj)}</div>
-            ${endereco ? `<div class="mandatario-endereco">${endereco}</div>` : ''}
-        </div>
+        <section class="section">
+            <h3>Prêmios</h3>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Descrição</th>
+                            ${mostrarApuracao ? '<th>Apur.</th>' : ''}
+                            <th class="num">Qtd.</th>
+                            <th class="num">Unitário</th>
+                            <th class="num">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${premios.map(premio => `
+                            <tr>
+                                <td>${escapeHTML(premio.descricao || 'Descrição não informada')}</td>
+                                ${mostrarApuracao ? `<td>${premio.apuracao}</td>` : ''}
+                                <td class="num">${formatNumber(Number(premio.quantidade) || 0)}</td>
+                                <td class="num">${formatCurrency(premio.valor_unitario)}</td>
+                                <td class="num">${formatCurrency(premio.valor_total)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td>Total</td>
+                            ${mostrarApuracao ? '<td></td>' : ''}
+                            <td class="num">${formatNumber(quantidade)}</td>
+                            <td></td>
+                            <td class="num">${formatCurrency(total)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
     `;
 }
 
-// Função para criar informações das apurações
-function createApuracoesInfo(apuracoes) {
-    if (!apuracoes || !Array.isArray(apuracoes) || apuracoes.length === 0) return '';
-    
-    let apuracoesHTML = '<div class="apuracoes-info" style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 10px;">';
-    apuracoesHTML += '<h4 style="margin-bottom: 10px; color: #333; font-size: 1rem;">Apurações:</h4>';
-    
-    apuracoes.forEach((apuracao, index) => {
-        const inicioApuracao = formatDateTime(apuracao.inicioApuracao);
-        const fimApuracao = formatDateTime(apuracao.fimApuracao);
-        const inicioParticipacao = formatDateTime(apuracao.inicioParticipacao);
-        const fimParticipacao = formatDateTime(apuracao.fimParticipacao);
-        
-        apuracoesHTML += `
-            <div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 8px; border-left: 3px solid #667eea;">
-                <div style="font-weight: 600; color: #333; margin-bottom: 5px;">
-                    Apuração ${index + 1}: ${apuracao.localApuracao || 'Local não informado'}
-                </div>
-                <div style="font-size: 0.85rem; color: #666;">
-                    <div>Início: ${inicioApuracao}</div>
-                    <div>Fim: ${fimApuracao}</div>
-                    <div>Participação: ${inicioParticipacao} - ${fimParticipacao}</div>
-                </div>
-                ${createPremiosInfo(apuracao.premios)}
-            </div>
-        `;
-    });
-    
-    apuracoesHTML += '</div>';
-    return apuracoesHTML;
+function createModalApuracoesInfo(apuracoes) {
+    if (!Array.isArray(apuracoes) || apuracoes.length === 0) return '';
+
+    return `
+        <section class="section">
+            <h3>Apurações (${apuracoes.length})</h3>
+            ${apuracoes.map((apuracao, index) => {
+                const local = [apuracao.localApuracao, formatEndereco(apuracao)].filter(Boolean).join(' · ');
+                return `
+                    <div class="apuracao">
+                        <div class="apuracao-title">
+                            <span>${index + 1}ª apuração</span>
+                            <span>${formatDateTime(apuracao.inicioApuracao || apuracao.fimApuracao)}</span>
+                        </div>
+                        <p>Participação de ${formatDate(apuracao.inicioParticipacao)} a ${formatDate(apuracao.fimParticipacao)}</p>
+                        ${local ? `<p>${escapeHTML(local)}</p>` : ''}
+                    </div>
+                `;
+            }).join('')}
+        </section>
+    `;
 }
 
-// Função para criar informações dos prêmios
-function createPremiosInfo(premios) {
-    if (!premios || !Array.isArray(premios) || premios.length === 0) return '';
-    
-    let premiosHTML = '<div style="margin-top: 10px;"><strong>Prêmios:</strong></div>';
-    premios.forEach((premio, index) => {
-        const valorUnitario = formatCurrency(premio.valor_unitario);
-        const valorTotal = formatCurrency(premio.valor_total);
-        const dataEntrega = formatDate(premio.data_entrega);
-        
-        premiosHTML += `
-            <div style="margin-top: 5px; padding: 8px; background: #f1f3f4; border-radius: 5px; font-size: 0.8rem;">
-                <div><strong>${premio.descricao || 'Descrição não informada'}</strong></div>
-                <div>Quantidade: ${premio.quantidade || 0}</div>
-                <div>Valor Unitário: ${valorUnitario}</div>
-                <div>Valor Total: ${valorTotal}</div>
-                ${dataEntrega !== 'N/A' ? `<div>Entrega: ${dataEntrega}</div>` : ''}
-            </div>
-        `;
-    });
-    
-    return premiosHTML;
+function closeModal() {
+    if (modal.open) modal.close();
 }
 
-// Funções utilitárias
-function formatDate(dateString) {
-    if (!dateString) return 'N/A';
-    
-    try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('pt-BR');
-    } catch (error) {
-        return dateString;
-    }
-}
-
-function formatDateTime(dateTimeString) {
-    if (!dateTimeString) return 'N/A';
-    
-    try {
-        const date = new Date(dateTimeString);
-        return date.toLocaleString('pt-BR');
-    } catch (error) {
-        return dateTimeString;
-    }
-}
-
-function formatCurrency(value) {
-    if (!value || isNaN(value)) return 'N/A';
-    
-    return new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
-    }).format(value);
-}
-
-function formatCNPJ(cnpj) {
-    // Remove caracteres não numéricos
-    const numbers = cnpj.value.replace(/\D/g, '');
-    
-    // Limita a 14 dígitos
-    const limited = numbers.substring(0, 14);
-    
-    // Aplica a máscara progressivamente
-    let formatted = limited;
-    if (limited.length > 2) {
-        formatted = limited.substring(0, 2) + '.' + limited.substring(2);
-    }
-    if (limited.length > 5) {
-        formatted = limited.substring(0, 2) + '.' + limited.substring(2, 5) + '.' + limited.substring(5);
-    }
-    if (limited.length > 8) {
-        formatted = limited.substring(0, 2) + '.' + limited.substring(2, 5) + '.' + limited.substring(5, 8) + '/' + limited.substring(8);
-    }
-    if (limited.length > 12) {
-        formatted = limited.substring(0, 2) + '.' + limited.substring(2, 5) + '.' + limited.substring(5, 8) + '/' + limited.substring(8, 12) + '-' + limited.substring(12);
-    }
-    
-    cnpj.value = formatted;
-}
-
-function handleCNPJPaste(event) {
-    // Aguarda um pouco para o valor ser colado no campo
-    setTimeout(() => {
-        formatCNPJ(event.target);
-    }, 10);
+function formatCNPJ(input) {
+    const numbers = input.value.replace(/\D/g, '').substring(0, 14);
+    input.value = numbers
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d)/, '$1-$2');
 }
 
 function cleanCNPJ(cnpj) {
-    // Remove todos os caracteres não numéricos do CNPJ
     return cnpj.replace(/\D/g, '');
 }
 
-function formatCNPJDisplay(cnpj) {
-    if (!cnpj) return 'N/A';
-    
-    const numbers = cnpj.replace(/\D/g, '');
-    if (numbers.length === 14) {
-        return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+function formatEndereco(origem) {
+    if (!origem) return '';
+    const parts = [origem.endereco, origem.numero, origem.complemento, origem.bairro, origem.cidade, origem.uf];
+    if (origem.cep) parts.push(`CEP ${origem.cep}`);
+    return parts.filter(Boolean).join(', ');
+}
+
+async function copyText(texto, mensagem) {
+    try {
+        await navigator.clipboard.writeText(texto);
+        showToast(mensagem);
+    } catch {
+        showToast('Não foi possível copiar');
     }
-    return cnpj;
 }
 
-function formatEndereco(mandatario) {
-    const parts = [];
-    
-    if (mandatario.endereco) parts.push(mandatario.endereco);
-    if (mandatario.numero) parts.push(mandatario.numero);
-    if (mandatario.complemento) parts.push(mandatario.complemento);
-    if (mandatario.bairro) parts.push(mandatario.bairro);
-    if (mandatario.cidade) parts.push(mandatario.cidade);
-    if (mandatario.uf) parts.push(mandatario.uf);
-    if (mandatario.cep) parts.push(mandatario.cep);
-    
-    return parts.length > 0 ? parts.join(', ') : '';
+function showToast(mensagem) {
+    const toast = $('toast');
+    toast.textContent = mensagem;
+    toast.classList.add('show');
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
-function getStatusClass(status) {
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes('autorizada')) return 'status-autorizada';
-    if (statusLower.includes('pendente')) return 'status-pendente';
-    if (statusLower.includes('cancelada')) return 'status-cancelada';
-    return 'status-pendente';
-}
-
-// Funções de controle de estado
+// ===== Estados =====
 function showLoading() {
     hideAllStates();
+    searchButton.disabled = true;
     loadingState.classList.remove('hidden');
 }
 
@@ -493,11 +553,6 @@ function showError(message) {
     hideAllStates();
     errorMessage.textContent = message;
     errorState.classList.remove('hidden');
-}
-
-function showEmptyState() {
-    hideAllStates();
-    emptyState.classList.remove('hidden');
 }
 
 function hideAllStates() {
@@ -508,313 +563,9 @@ function hideAllStates() {
 }
 
 function clearFilters() {
-    searchForm.reset();
-    hideAllStates();
-    currentPromocoes = [];
-    
-    // Resetar para ano atual
-    const currentYear = new Date().getFullYear();
-    document.getElementById('anoPromocao').value = currentYear;
+    URL_FIELDS.forEach(field => { $(field).value = ''; });
+    $('vigentes').checked = false;
+    setAno(getAnoAtual());
+    updateFilterCount();
+    searchForm.requestSubmit();
 }
-
-// Função para mostrar detalhes da promoção em modal
-function showPromocaoDetails(promocao) {
-    // Criar modal se não existir
-    let modal = document.getElementById('promocaoModal');
-    if (!modal) {
-        modal = createModal();
-        document.body.appendChild(modal);
-    }
-    
-    // Preencher conteúdo do modal
-    fillModalContent(modal, promocao);
-    
-    // Mostrar modal
-    modal.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-}
-
-// Função para criar estrutura do modal
-function createModal() {
-    const modal = document.createElement('div');
-    modal.id = 'promocaoModal';
-    modal.className = 'modal';
-    modal.style.display = 'none';
-    
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Detalhes da Promoção</h2>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
-            </div>
-            <div class="modal-body" id="modalBody">
-                <!-- Conteúdo será preenchido dinamicamente -->
-            </div>
-        </div>
-    `;
-    
-    // Fechar modal ao clicar fora
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
-    
-    return modal;
-}
-
-// Função para preencher conteúdo do modal
-function fillModalContent(modal, promocao) {
-    const modalBody = modal.querySelector('#modalBody');
-    
-    // Formatar datas
-    const dataInicio = formatDate(promocao.dataInicio);
-    const dataFim = formatDate(promocao.dataFim);
-    const valorTotal = formatCurrency(promocao.valorTotal);
-    
-    modalBody.innerHTML = `
-        <div class="modal-section">
-            <h3>Informações Básicas</h3>
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <span class="detail-label">Número da Promoção:</span>
-                    <span class="detail-value">${promocao.numeroPromocao || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Nome:</span>
-                    <span class="detail-value">${promocao.nome || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Modalidade:</span>
-                    <span class="detail-value">${promocao.modalidade || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Status:</span>
-                    <span class="detail-value promocao-status ${getStatusClass(promocao.situacao)}">${promocao.situacao || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Certificado:</span>
-                    <span class="detail-value">${promocao.numeroCA || 'N/A'}</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="modal-section">
-            <h3>Período e Valores</h3>
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <span class="detail-label">Data de Início:</span>
-                    <span class="detail-value">${dataInicio}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Data de Fim:</span>
-                    <span class="detail-value">${dataFim}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Quantidade de Prêmios:</span>
-                    <span class="detail-value">${promocao.quantidadePremios || 0}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Valor Total:</span>
-                    <span class="detail-value">${valorTotal}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Abrangência:</span>
-                    <span class="detail-value">${promocao.abrangencia || 'N/A'}</span>
-                </div>
-            </div>
-        </div>
-        
-        ${createModalMandatarioInfo(promocao.mandatario)}
-        ${createModalApuracoesInfo(promocao.apuracoes)}
-        ${createModalPremiosInfo(promocao.apuracoes)}
-    `;
-}
-
-// Função para criar informações do mandatário no modal
-function createModalMandatarioInfo(mandatario) {
-    if (!mandatario) return '';
-    
-    const endereco = formatEndereco(mandatario);
-    
-    return `
-        <div class="modal-section">
-            <h3>Informações do Mandatário</h3>
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <span class="detail-label">Razão Social:</span>
-                    <span class="detail-value">${mandatario.razaoSocial || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Nome Fantasia:</span>
-                    <span class="detail-value">${mandatario.nomeFantasia || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">CNPJ:</span>
-                    <span class="detail-value">${formatCNPJDisplay(mandatario.cnpj)}</span>
-                </div>
-                ${endereco ? `
-                <div class="detail-item full-width">
-                    <span class="detail-label">Endereço:</span>
-                    <span class="detail-value">${endereco}</span>
-                </div>
-                ` : ''}
-            </div>
-        </div>
-    `;
-}
-
-// Função para criar informações das apurações no modal
-function createModalApuracoesInfo(apuracoes) {
-    if (!apuracoes || !Array.isArray(apuracoes) || apuracoes.length === 0) return '';
-    
-    let apuracoesHTML = '<div class="modal-section"><h3>Apurações</h3>';
-    
-    apuracoes.forEach((apuracao, index) => {
-        const enderecoCompleto = formatEnderecoApuracao(apuracao);
-        
-        apuracoesHTML += `
-            <div class="apuracao-item">
-                <h4>Apuração ${index + 1}</h4>
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <span class="detail-label">ID:</span>
-                        <span class="detail-value">${apuracao.idApuracao || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Local:</span>
-                        <span class="detail-value">${apuracao.localApuracao || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Início da Apuração:</span>
-                        <span class="detail-value">${formatDate(apuracao.inicioApuracao) || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Fim da Apuração:</span>
-                        <span class="detail-value">${formatDate(apuracao.fimApuracao) || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Início da Participação:</span>
-                        <span class="detail-value">${formatDate(apuracao.inicioParticipacao) || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Fim da Participação:</span>
-                        <span class="detail-value">${formatDate(apuracao.fimParticipacao) || 'N/A'}</span>
-                    </div>
-                    ${enderecoCompleto ? `
-                    <div class="detail-item full-width">
-                        <span class="detail-label">Endereço:</span>
-                        <span class="detail-value">${enderecoCompleto}</span>
-                    </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    apuracoesHTML += '</div>';
-    return apuracoesHTML;
-}
-
-// Função para formatar endereço da apuração
-function formatEnderecoApuracao(apuracao) {
-    const parts = [];
-    
-    if (apuracao.endereco) parts.push(apuracao.endereco);
-    if (apuracao.numero) parts.push(apuracao.numero);
-    if (apuracao.complemento) parts.push(apuracao.complemento);
-    if (apuracao.bairro) parts.push(apuracao.bairro);
-    if (apuracao.cidade) parts.push(apuracao.cidade);
-    if (apuracao.uf) parts.push(apuracao.uf);
-    if (apuracao.cep) parts.push(apuracao.cep);
-    
-    return parts.length > 0 ? parts.join(', ') : '';
-}
-
-// Função para criar informações dos prêmios no modal
-function createModalPremiosInfo(apuracoes) {
-    if (!apuracoes || !Array.isArray(apuracoes) || apuracoes.length === 0) return '';
-    
-    // Coletar todos os prêmios de todas as apurações
-    let todosPremios = [];
-    apuracoes.forEach((apuracao, apuracaoIndex) => {
-        if (apuracao.premios && Array.isArray(apuracao.premios)) {
-            apuracao.premios.forEach((premio, premioIndex) => {
-                todosPremios.push({
-                    ...premio,
-                    apuracaoIndex: apuracaoIndex + 1,
-                    premioIndex: premioIndex + 1
-                });
-            });
-        }
-    });
-    
-    if (todosPremios.length === 0) return '';
-    
-    let premiosHTML = '<div class="modal-section"><h3>Prêmios</h3>';
-    
-    todosPremios.forEach((premio, index) => {
-        premiosHTML += `
-            <div class="premio-item">
-                <h4>Prêmio ${index + 1} (Apuração ${premio.apuracaoIndex})</h4>
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <span class="detail-label">Descrição:</span>
-                        <span class="detail-value">${premio.descricao || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Quantidade:</span>
-                        <span class="detail-value">${premio.quantidade || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Valor Unitário:</span>
-                        <span class="detail-value">${formatCurrency(premio.valor_unitario) || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Valor Total:</span>
-                        <span class="detail-value">${formatCurrency(premio.valor_total) || 'N/A'}</span>
-                    </div>
-                    <div class="detail-item">
-                        <span class="detail-label">Ordem:</span>
-                        <span class="detail-value">${premio.ordem || 'N/A'}</span>
-                    </div>
-                    ${premio.data_entrega ? `
-                    <div class="detail-item">
-                        <span class="detail-label">Data de Entrega:</span>
-                        <span class="detail-value">${formatDate(premio.data_entrega) || 'N/A'}</span>
-                    </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    premiosHTML += '</div>';
-    return premiosHTML;
-}
-
-// Função para fechar modal
-function closeModal() {
-    const modal = document.getElementById('promocaoModal');
-    if (modal) {
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-    }
-}
-
-function retrySearch() {
-    if (currentPromocoes.length > 0) {
-        displayResults(currentPromocoes);
-    } else {
-        hideAllStates();
-    }
-}
-
-// Função para lidar com erros de CORS (se necessário)
-function handleCORS() {
-    // Se houver problemas de CORS, podemos implementar um proxy
-    console.log('Implementando proxy para CORS se necessário');
-}
-
-// Inicializar tratamento de CORS
-handleCORS();
